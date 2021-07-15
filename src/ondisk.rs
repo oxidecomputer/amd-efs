@@ -3,7 +3,7 @@
 use core::mem::size_of;
 use byteorder::LittleEndian;
 use num_derive::FromPrimitive;
-use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
+use zerocopy::{AsBytes, FromBytes, Unaligned, U16, U32, U64};
 
 type LU16 = U16<LittleEndian>;
 type LU32 = U32<LittleEndian>;
