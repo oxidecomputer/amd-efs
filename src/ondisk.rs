@@ -1,6 +1,5 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
-use core::mem::size_of;
 use byteorder::LittleEndian;
 use num_derive::FromPrimitive;
 use zerocopy::{AsBytes, FromBytes, Unaligned, U16, U32, U64};
@@ -200,6 +199,7 @@ impl Default for BiosDirectoryEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::mem::size_of;
 
     #[test]
     fn test_struct_sizes() {
