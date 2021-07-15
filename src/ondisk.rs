@@ -9,12 +9,60 @@ type LU16 = U16<LittleEndian>;
 type LU32 = U32<LittleEndian>;
 type LU64 = U64<LittleEndian>;
 
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive)]
+pub enum SpiReadMode {
+    Normal33_33Mhz = 0b000, // up to 33.33 MHz
+    Dual112 = 0b010,
+    Quad114 = 0b011,
+    Dual122 = 0b100,
+    Quad144 = 0b101,
+    Normal66_66Mhz = 0b110, // up to 66.66 MHz
+    Fast = 0b111,
+    DoNothing = 0xff,
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive)]
+pub enum SpiFastSpeedNew {
+    Speed66_66MHz = 0,
+    Speed33_33MHz = 1,
+    Speed22_22MHz = 2,
+    Speed16_66MHz = 3,
+    Speed100MHz = 0b100,
+    Speed800kHz = 0b101,
+    DoNothing = 0xff,
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive)]
+pub enum SpiNaplesMicronMode {
+    DummyCycle = 0x0a,
+    DoNothing = 0xff,
+}
+
 #[derive(FromBytes, AsBytes, Unaligned)]
 #[repr(C, packed)]
-pub struct EfhSpiMode {
-    read_mode: u8,
-    fast_speed_new: u8,
-    micron_dummy_cycle: u8, // for Micron
+pub struct EfhNaplesSpiMode {
+    read_mode: u8, // SpiReadMode or garbage
+    fast_speed_new: u8, // SpiFastSpeedNew or garbage
+    micron_mode: u8, // SpiNaplesMicronMode or garbage
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive)]
+pub enum SpiRomeMicronMode {
+    RomeSupportMicron = 0x55,
+    RomeForceMicron = 0xaa,
+    DoNothing = 0xff,
+}
+
+#[derive(FromBytes, AsBytes, Unaligned)]
+#[repr(C, packed)]
+pub struct EfhRomeSpiMode {
+    read_mode: u8, // SpiReadMode or garbage
+    fast_speed_new: u8, // SpiFastSpeedNew or garbage
+    micron_mode: u8, // SpiRomeMicronMode or garbage
 }
 
 #[derive(FromBytes, AsBytes, Unaligned)]
@@ -32,9 +80,10 @@ pub struct Efh {
     pub promontory_firmware_location: LU32,
     pub low_power_promontory_firmware_location: LU32,
     _padding2: [LU32; 2], // at offset 0x38
-    _reserved: EfhSpiMode, // SPI for family 15h; Note: micron_dummy_cycle is reserved instead
-    pub spi_mode_zen_naples: EfhSpiMode,
-    pub spi_mode_zen_rome: EfhSpiMode,
+    _reserved: [u8; 3], // SPI for family 15h; Note: micron_mode is reserved instead
+    pub spi_mode_zen_naples: EfhNaplesSpiMode,
+    pub spi_mode_zen_rome: EfhRomeSpiMode,
+    _reserved2: u8,
 }
 
 impl Default for Efh {
@@ -52,9 +101,10 @@ impl Default for Efh {
             promontory_firmware_location: 0xffff_ffff.into(),
             low_power_promontory_firmware_location: 0xffff_ffff.into(),
             _padding2: [0xffff_ffff.into(); 2],
-            _reserved: EfhSpiMode { read_mode: 0xff, fast_speed_new: 0xff, micron_dummy_cycle: 0xff },
-            spi_mode_zen_naples: EfhSpiMode { read_mode: 0xff, fast_speed_new: 0xff, micron_dummy_cycle: 0xff },
-            spi_mode_zen_rome: EfhSpiMode { read_mode: 0xff, fast_speed_new: 0xff, micron_dummy_cycle: 0xff },
+            _reserved: [0xff; 3],
+            spi_mode_zen_naples: EfhNaplesSpiMode { read_mode: 0xff, fast_speed_new: 0xff, micron_mode: 0xff },
+            spi_mode_zen_rome: EfhRomeSpiMode { read_mode: 0xff, fast_speed_new: 0xff, micron_mode: 0xff },
+            _reserved2: 0,
         }
     }
 }
@@ -153,7 +203,8 @@ mod tests {
 
     #[test]
     fn test_struct_sizes() {
-        assert!(size_of::<EfhSpiMode>() == 3);
+        assert!(size_of::<EfhNaplesSpiMode>() == 3);
+        assert!(size_of::<EfhRomeSpiMode>() == 3);
         assert!(size_of::<Efh>() < 0x100);
         assert!(size_of::<PspDirectoryHeader>() == 16);
         assert!(size_of::<PspDirectoryEntry>() == 16);
