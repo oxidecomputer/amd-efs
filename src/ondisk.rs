@@ -90,7 +90,8 @@ pub struct Efh {
     pub psp_directory_table_location_zen: LU32,
     pub bios_directory_tables: [LU32; 3], // Naples (usually unused), Newer (usually unused), Rome
     pub second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
-    _padding: [LU32; 2],
+    pub bios_directory_table_milan: LU32, // or Combo
+    _padding: LU32,
     pub promontory_firmware_location: LU32,
     pub low_power_promontory_firmware_location: LU32,
     _padding2: [LU32; 2], // at offset 0x38
@@ -111,7 +112,8 @@ impl Default for Efh {
             psp_directory_table_location_zen: 0.into(), // probably invalid
             bios_directory_tables: [0.into(); 3], // probably invalid
             second_gen_efs: 0xffff_fffe.into(),
-            _padding: [0xffff_ffff.into(); 2],
+            bios_directory_table_milan: 0xffff_ffff.into(),
+            _padding: 0xffff_ffff.into(),
             promontory_firmware_location: 0xffff_ffff.into(),
             low_power_promontory_firmware_location: 0xffff_ffff.into(),
             _padding2: [0xffff_ffff.into(); 2],
