@@ -123,10 +123,24 @@ impl Default for Efh {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+pub enum ProcessorGeneration {
+    Milan = 1,
+}
+
 impl Efh {
     /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place
     pub fn second_gen_efs(&self) -> bool {
-        self.second_gen_efs.get() == 0xffff_fffe
+        self.second_gen_efs.get() & 1 == 0
+    }
+
+    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place
+    /// Note: generation 1 is Milan
+    pub fn compatible_with_processor_generation(&self, generation: ProcessorGeneration) -> bool {
+        let generation: u8 = generation as u8;
+        assert!(generation < 16);
+        self.second_gen_efs.get() & (1 << generation) == 0
     }
 }
 
