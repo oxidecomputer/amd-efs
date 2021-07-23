@@ -3,6 +3,7 @@ mod efs;
 mod ondisk;
 mod types;
 pub use types::Result;
+pub use crate::efs::Efs;
 
 #[cfg(test)]
 mod tests {

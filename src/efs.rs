@@ -5,9 +5,10 @@ use crate::ondisk::Efh;
 use crate::types::Result;
 use crate::types::Error;
 use zerocopy::LayoutVerified;
+use crate::ondisk::header_from_collection_mut;
 
 // TODO: Borrow storage.
-struct Efs<T: Flash> {
+pub struct Efs<T: Flash> {
     storage: T,
 }
 
@@ -21,10 +22,25 @@ impl Flash for Efs {
 */
 
 impl<T: Flash> Efs<T> {
-    pub fn new(storage: T) -> Self {
-        Self {
+    pub fn load(storage: T) -> Result<Self> {
+        Ok(Self {
             storage,
+        })
+    }
+    pub fn create(mut storage: T) -> Result<Self> {
+        // FIXME
+        let mut buf: [u8; 4096] = [0xFF; 4096];
+        match header_from_collection_mut(&mut buf[..]) {
+            Some(item) => {
+                let efh: Efh = Efh::default();
+                *item = efh;
+            }
+            None => {
+            },
         }
+
+        storage.write_block(0x20_000, &buf)?;
+        Self::load(storage)
     }
     // TODO: Extra arguments to filter by version
     pub fn embedded_firmware_structure(&self) -> Result<Efh> {
@@ -32,9 +48,9 @@ impl<T: Flash> Efs<T> {
             let mut xbuf: [u8; 4096] = [0; 4096];
 
             self.storage.read_block(*position, &mut xbuf[..])?;
-            let item = LayoutVerified::<_, Efh>::new(&xbuf[..]);
+            let item = LayoutVerified::<_, Efh>::new_from_prefix(&xbuf[..]);
             match item {
-                Some(item) => {
+                Some((item, _)) => {
                     let item = item.into_ref();
                     if item.signature.get() == 0x55AA55AA && item.second_gen_efs() {
                         return Ok(*item);
