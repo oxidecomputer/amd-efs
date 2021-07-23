@@ -1,4 +1,5 @@
 
+#[derive(Debug)]
 pub enum Error {
     IoError(amd_flash::Error),
     HeaderNotFound,
@@ -11,4 +12,3 @@ impl From<amd_flash::Error> for Error {
         Error::IoError(error)
     }
 }
-
