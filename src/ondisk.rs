@@ -44,7 +44,7 @@ pub enum SpiNaplesMicronMode {
     DoNothing = 0xff,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct EfhNaplesSpiMode {
     read_mode: u8, // SpiReadMode or garbage
@@ -60,7 +60,7 @@ pub enum SpiRomeMicronMode {
     DoNothing = 0xff,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct EfhRomeSpiMode {
     read_mode: u8, // SpiReadMode or garbage
@@ -68,7 +68,7 @@ pub struct EfhRomeSpiMode {
     micron_mode: u8, // SpiRomeMicronMode or garbage
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct Efh {
     pub signature: LU32, // 0x55aa_55aa
@@ -113,6 +113,7 @@ impl Default for Efh {
 }
 
 impl Efh {
+    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place
     pub fn second_gen_efs(&self) -> bool {
         self.second_gen_efs.get() == 0xffff_fffe
     }
