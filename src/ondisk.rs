@@ -3,7 +3,18 @@
 use byteorder::LittleEndian;
 use num_derive::FromPrimitive;
 use amd_flash::Location;
-use zerocopy::{AsBytes, FromBytes, Unaligned, U16, U32, U64};
+use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
+
+/// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
+/// If the item cannot be parsed, returns None.
+pub fn header_from_collection_mut<'a, T: Sized + FromBytes + AsBytes>(buf: &'a mut [u8]) -> Option<&'a mut T> {
+    match LayoutVerified::<_, T>::new_from_prefix(buf) {
+        Some((item, _xbuf)) => {
+            Some(item.into_mut())
+        },
+        None => None,
+    }
+}
 
 type LU16 = U16<LittleEndian>;
 type LU32 = U32<LittleEndian>;
