@@ -1,6 +1,6 @@
 
 use amd_flash::Flash;
-use crate::ondisk::embedded_firmware_structure_position;
+use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
 use crate::ondisk::Efh;
 use crate::types::Result;
 use crate::types::Error;
@@ -44,7 +44,7 @@ impl<T: Flash> Efs<T> {
     }
     // TODO: Extra arguments to filter by version
     pub fn embedded_firmware_structure(&self) -> Result<Efh> {
-        for position in embedded_firmware_structure_position.iter() {
+        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; 4096] = [0; 4096];
 
             self.storage.read_block(*position, &mut xbuf[..])?;
@@ -52,6 +52,7 @@ impl<T: Flash> Efs<T> {
             match item {
                 Some((item, _)) => {
                     let item = item.into_ref();
+                    // TODO: item.compatible_with_processor_generation(0) for Milan; earlier processor generations don't have this, though.
                     if item.signature.get() == 0x55AA55AA && item.second_gen_efs() {
                         return Ok(*item);
                     }
