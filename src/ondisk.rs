@@ -2,14 +2,18 @@
 
 use byteorder::LittleEndian;
 use num_derive::FromPrimitive;
+use amd_flash::Location;
 use zerocopy::{AsBytes, FromBytes, Unaligned, U16, U32, U64};
 
 type LU16 = U16<LittleEndian>;
 type LU32 = U32<LittleEndian>;
 type LU64 = U64<LittleEndian>;
 
+// The first one is recommended by AMD; the last one is always used in practice.
+pub const embedded_firmware_structure_position: [Location; 6] = [0xFA_0000, 0xF2_0000, 0xE2_0000, 0xC2_0000, 0x82_0000, 0x2_0000];
+
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
 pub enum SpiReadMode {
     Normal33_33Mhz = 0b000, // up to 33.33 MHz
     Dual112 = 0b010,
@@ -22,7 +26,7 @@ pub enum SpiReadMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
 pub enum SpiFastSpeedNew {
     Speed66_66MHz = 0,
     Speed33_33MHz = 1,
@@ -34,13 +38,13 @@ pub enum SpiFastSpeedNew {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
 pub enum SpiNaplesMicronMode {
     DummyCycle = 0x0a,
     DoNothing = 0xff,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct EfhNaplesSpiMode {
     read_mode: u8, // SpiReadMode or garbage
@@ -49,14 +53,14 @@ pub struct EfhNaplesSpiMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
 pub enum SpiRomeMicronMode {
     RomeSupportMicron = 0x55,
     RomeForceMicron = 0xaa,
     DoNothing = 0xff,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct EfhRomeSpiMode {
     read_mode: u8, // SpiReadMode or garbage
@@ -64,7 +68,7 @@ pub struct EfhRomeSpiMode {
     micron_mode: u8, // SpiRomeMicronMode or garbage
 }
 
-#[derive(FromBytes, AsBytes, Unaligned)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct Efh {
     pub signature: LU32, // 0x55aa_55aa
@@ -105,6 +109,12 @@ impl Default for Efh {
             spi_mode_zen_rome: EfhRomeSpiMode { read_mode: 0xff, fast_speed_new: 0xff, micron_mode: 0xff },
             _reserved2: 0,
         }
+    }
+}
+
+impl Efh {
+    pub fn second_gen_efs(&self) -> bool {
+        self.second_gen_efs.get() == 0xffff_fffe
     }
 }
 

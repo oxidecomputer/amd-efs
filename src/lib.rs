@@ -1,5 +1,8 @@
 
+mod efs;
 mod ondisk;
+mod types;
+pub use types::Result;
 
 #[cfg(test)]
 mod tests {
