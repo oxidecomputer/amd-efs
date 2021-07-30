@@ -1,20 +1,7 @@
-
-# Flash access crate
-
-* QSPI
-  * Note: QSPI is MMIO mapped for reading, but not for writing
-* rw block size
-* erase block size (is bigger than rw block size)
-
-# amd-efh crate
-
-* Access blocks, not bytes, not stream
-  * Maybe maintain Flash allocation bitmap maybe?
-    * Maybe just wing it
-* When to erase
-  * diff
-  * or just only touch things as you go
-  * Skip erasing for all-1 ?
-* Directory: needs stream abstraction
-  * over a certain number of (consecutive) blocks; growable?!
-* Minimal entry body size seems to be 0x100
+* Header is much smaller than a block
+* So we need a stream over many sequential blocks
+  for directory
+  for reading/writing "files" in general
+* Who has the current file position?
+  Is position user-visible?  Probably not.  Maybe.
+  Maybe even have pread, pwrite.
