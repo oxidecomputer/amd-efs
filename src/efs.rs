@@ -1,5 +1,5 @@
 
-use amd_flash::Flash;
+use amd_flash::{FlashRead, FlashWrite};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
 use crate::ondisk::Efh;
 use crate::types::Result;
@@ -8,20 +8,11 @@ use zerocopy::LayoutVerified;
 use crate::ondisk::header_from_collection_mut;
 
 // TODO: Borrow storage.
-pub struct Efs<T: Flash> {
+pub struct Efs<T: FlashRead<0x1000> + FlashWrite<0x1000, 0x2_0000>> {
     storage: T,
 }
 
-/*
-impl Flash for Efs {
-        fn block_size() -> usize;
-        fn read_block(location: Location, buffer: &mut [u8]) -> Result<()>;
-        fn write_block(location: Location, buffer: &[u8]) -> Result<()>;
-        fn erase_block(location: Location) -> Result<()>;
-}
-*/
-
-impl<T: Flash> Efs<T> {
+impl<T: FlashRead<0x1000> + FlashWrite<0x1000, 0x2_0000>> Efs<T> {
     pub fn load(storage: T) -> Result<Self> {
         Ok(Self {
             storage,
@@ -47,7 +38,7 @@ impl<T: Flash> Efs<T> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; 4096] = [0; 4096];
 
-            self.storage.read_block(*position, &mut xbuf[..])?;
+            self.storage.read_block(*position, &mut xbuf)?;
             let item = LayoutVerified::<_, Efh>::new_from_prefix(&xbuf[..]);
             match item {
                 Some((item, _)) => {
