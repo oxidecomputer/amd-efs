@@ -160,7 +160,7 @@ impl Efh {
 #[derive(FromBytes, AsBytes, Unaligned)]
 #[repr(C, packed)]
 pub struct PspDirectoryHeader {
-    cookie: LU32, // fourcc "$PSP" or "$PL2"
+    cookie: [u8; 4], // b"$PSP" or b"$PL2"
     checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     total_entries: LU32,
     additional_info: LU32, // 0xffff_ffff; or TODO: PSP Directory Table Additional Info Fields (9 bits: max size in blocks of 4 KiB; 4 bits: spi block size; 15 bits: [26:12] of Directory Image Base Address; 2 bits: address mode)
@@ -169,10 +169,10 @@ pub struct PspDirectoryHeader {
 impl Default for PspDirectoryHeader {
     fn default() -> Self {
         Self {
-            cookie: 0.into(),
-            checksum: 0.into(),
+            cookie: *b"    ", // invalid
+            checksum: 0.into(), // invalid
             total_entries: 0.into(),
-            additional_info: 0xffff_ffff.into(),
+            additional_info: 0xffff_ffff.into(), // invalid
         }
     }
 }
@@ -288,7 +288,7 @@ impl Default for PspDirectoryEntry {
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct BiosDirectoryHeader {
-    pub cookie: LU32, // fourcc "$BHD" or "$BL2"
+    pub cookie: [u8; 4], // b"$BHD" or b"$BL2"
     pub checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     pub total_entry_count: LU32,
     _reserved: LU32,
@@ -297,10 +297,10 @@ pub struct BiosDirectoryHeader {
 impl Default for BiosDirectoryHeader {
     fn default() -> Self {
         Self {
-            cookie: 0.into(),
-            checksum: 0.into(),
+            cookie: *b"    ", // invalid
+            checksum: 0.into(), // invalid
             total_entry_count: 0.into(),
-            _reserved: 0xffff_ffff.into(),
+            _reserved: 0xffff_ffff.into(), // invalid
         }
     }
 }
