@@ -312,7 +312,7 @@ pub enum BiosDirectoryEntryType {
     Mp2FirmwareConfiguration = 0x6A,
     CorebootVbootWorkbuffer = 0x6B, // main memory shared between PSP and x86
     MpmConfiguration = 0x6C,
-    Level2Directory = 0x70, // also a BiosDirectory
+    SecondLevelDirectory = 0x70, // also a BiosDirectory
 }
 
 #[derive(FromBytes, AsBytes, Unaligned)]
