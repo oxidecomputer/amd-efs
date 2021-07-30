@@ -171,9 +171,9 @@ impl Default for PspDirectoryHeader {
 pub struct PspDirectoryEntry {
     pub type_: u8,
     pub sub_program: u8,
-    _reserved: LU16,
+    _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
-    value_or_location: LU64, // Note: value iff size == 0; otherwise location
+    value_or_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits)
 }
 
 impl Default for PspDirectoryEntry {
