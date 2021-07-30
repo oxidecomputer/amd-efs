@@ -294,6 +294,27 @@ impl Default for BiosDirectoryHeader {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+pub enum BiosDirectoryEntryType {
+    OemPublicKey = 0x05,
+    CryptographicSignature = 0x07,
+    Apcb = 0x60,
+    Apob = 0x61,
+    Bios = 0x62,
+    ApobNvCopy = 0x63, // used during S3 resume
+    PmuFirmwareInstructions = 0x64,
+    PmuFirmwareData = 0x65,
+    MicrocodePatch = 0x66,
+    MceData = 0x67,
+    ApcbBackup = 0x68,
+    VgaInterpreter = 0x69,
+    Mp2FirmwareConfiguration = 0x6A,
+    CorebootVbootWorkbuffer = 0x6B, // main memory shared between PSP and x86
+    MpmConfiguration = 0x6C,
+    Level2Directory = 0x70, // also a BiosDirectory
+}
+
 #[derive(FromBytes, AsBytes, Unaligned)]
 #[repr(C, packed)]
 pub struct BiosDirectoryEntry {
