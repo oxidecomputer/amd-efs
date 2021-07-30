@@ -152,7 +152,7 @@ pub struct PspDirectoryHeader {
     cookie: LU32, // fourcc "$PSP" or "$PL2"
     checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     total_entries: LU32,
-    _reserved: LU32, // 0xffff_ffff
+    additional_info: LU32, // 0xffff_ffff; or TODO: PSP Directory Table Additional Info Fields (9 bits: max size in blocks of 4 KiB; 4 bits: spi block size; 15 bits: [26:12] of Directory Image Base Address; 2 bits: address mode)
 }
 
 impl Default for PspDirectoryHeader {
@@ -161,7 +161,7 @@ impl Default for PspDirectoryHeader {
             cookie: 0.into(),
             checksum: 0.into(),
             total_entries: 0.into(),
-            _reserved: 0xffff_ffff.into(),
+            additional_info: 0xffff_ffff.into(),
         }
     }
 }
