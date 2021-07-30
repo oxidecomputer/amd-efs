@@ -256,7 +256,7 @@ pub enum PspDirectoryEntryType {
 #[repr(C, packed)]
 pub struct PspDirectoryEntry {
     pub type_: u8,
-    pub sub_program: u8,
+    pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
     _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
     value_or_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits)
@@ -300,7 +300,7 @@ pub struct BiosDirectoryEntry {
     pub type_: u8, // TODO: enum
     pub region_type: u8,
     pub flags: u8,
-    pub sub_program: u8, // and reserved; default: 0
+    pub sub_program: u8, // and reserved; function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
     size: LU32,
     value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
