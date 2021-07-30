@@ -2,6 +2,7 @@
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
 use crate::ondisk::Efh;
+pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
 use zerocopy::LayoutVerified;
@@ -52,9 +53,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         storage.write_block(0x20_000, &buf)?;
         Self::load(storage)
     }
-    // TODO: Extra arguments to filter by version
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again
-    pub fn embedded_firmware_structure(&self) -> Result<Efh> {
+    pub fn embedded_firmware_structure(&self, processor_generation: Option<ProcessorGeneration>) -> Result<Efh> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
 
@@ -63,8 +63,11 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
             match item {
                 Some((item, _)) => {
                     let item = item.into_ref();
-                    // TODO: item.compatible_with_processor_generation(0) for Milan; earlier processor generations don't have this, though.
-                    if item.signature.get() == 0x55AA55AA && item.second_gen_efs() { // note: only one Efh with second_gen_efs()==true allowed in entire Flash!
+                    // Note: only one Efh with second_gen_efs()==true allowed in entire Flash!
+                    if item.signature.get() == 0x55AA55AA && item.second_gen_efs() && match processor_generation {
+                        Some(x) => item.compatible_with_processor_generation(x),
+                        None => true,
+                    } {
                         // TODO: if (fuse_is_clear(FUSE_2ND_GEN_EFS) || check_2nd_gen_efs(offset)) check_2nd_gen_efs(offset) bit at 0x24
                         return Ok(*item);
                     }
