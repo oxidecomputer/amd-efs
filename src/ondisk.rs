@@ -233,8 +233,8 @@ pub enum PspDirectoryEntryType {
     PspBootloaderUserApplication = 0x52,
     PspBootloaderUserApplicationPublicKey = 0x53,
     PspRpmcNvram = 0x54,
-    BootloaderSplTable = 0x55,
-    TosSplTable = 0x56,
+    BootloaderSplTable = 0x55, // used by boot ROM
+    TosSplTable = 0x56, // used by off-chip bootloader
     PspBootloaderCvipConfigurationTable = 0x57,
     DmcuEram = 0x58,
     DmcuIsr = 0x59,
@@ -242,6 +242,14 @@ pub enum PspDirectoryEntryType {
     Msmu1 = 0x5B,
     OemSysTa = 0x80,
     OemSysTaPublicKey = 0x81,
+    OemIkek = 0x82,
+    OemSplTable = 0x83, // used by customer-signed binary
+    OemTkek = 0x84,
+    AmfFirmwarePart1 = 0x85,
+    AmfFirmwarePart2 = 0x86,
+    MpmFactoryProvisioningData = 0x87,
+    MpmWlanFirmware = 0x88,
+    MpmSecurityDriver = 0x89,
 }
 
 #[derive(FromBytes, AsBytes, Unaligned)]
