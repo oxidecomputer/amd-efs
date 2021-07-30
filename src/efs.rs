@@ -1,11 +1,30 @@
 
-use amd_flash::{FlashRead, FlashWrite};
+use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
 use crate::ondisk::Efh;
 use crate::types::Result;
 use crate::types::Error;
 use zerocopy::LayoutVerified;
 use crate::ondisk::header_from_collection_mut;
+
+pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
+    storage: &'a T,
+
+}
+
+pub struct EfhPspIterator<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
+    storage: &'a T,
+    current_position: Location,
+}
+
+impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Iterator for EfhPspIterator<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+   type Item = PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
+   fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+       Some(PspDirectory {
+           storage: self.storage,
+       })
+   }
+}
 
 // TODO: Borrow storage.
 pub struct Efs<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
@@ -54,4 +73,11 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         }
         Err(Error::HeaderNotFound)
     }
+
+    pub fn psp_directories(&self, embedded_firmware_structure: &Efh) -> EfhPspIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+        EfhPspIterator {
+            storage: &self.storage,
+        }
+    }
+
 }
