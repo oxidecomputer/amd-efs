@@ -89,7 +89,7 @@ pub struct Efh {
     _psp_directory_table_location_early: LU32, // usually unused
     pub psp_directory_table_location_zen: LU32,
     pub bios_directory_tables: [LU32; 3], // Naples (usually unused), Newer (usually unused), Rome
-    pub second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
+    second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
     pub bios_directory_table_milan: LU32, // or Combo
     _padding: LU32,
     pub promontory_firmware_location: LU32,
