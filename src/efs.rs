@@ -1,7 +1,7 @@
 
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -11,20 +11,25 @@ use crate::ondisk::header_from_collection_mut;
 
 pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
-
+    location: Location,
+    pub header: PspDirectoryHeader,
 }
 
-pub struct EfhPspIterator<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
-    storage: &'a T,
-    current_position: Location,
-}
-
-impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Iterator for EfhPspIterator<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-   type Item = PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
-   fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-       Some(PspDirectory {
-           storage: self.storage,
-       })
+impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    fn new(storage: &'a T, location: Location) -> Result<Self> {
+       let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+       storage.read_block(location, &mut xbuf)?;
+       let (item, _) = LayoutVerified::<_, PspDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
+       let header = item.into_ref();
+       if header.cookie == *b"$PSP" || header.cookie == *b"$PL2" {
+           Ok(Self {
+               storage,
+               location,
+               header: *header,
+           })
+       } else {
+           Err(Error::Marshal)
+       }
    }
 }
 
@@ -105,7 +110,6 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     pub fn embedded_firmware_structure(&self, processor_generation: Option<ProcessorGeneration>) -> Result<Efh> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-
             self.storage.read_block(*position, &mut xbuf)?;
             let item = LayoutVerified::<_, Efh>::new_from_prefix(&xbuf[..]);
             match item {
@@ -127,12 +131,21 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         Err(Error::HeaderNotFound)
     }
 
-    pub fn psp_directories(&self, embedded_firmware_structure: &Efh) -> EfhPspIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-        EfhPspIterator {
-            storage: &self.storage,
+    pub fn psp_directory(&self, embedded_firmware_structure: &Efh) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+        if embedded_firmware_structure.psp_directory_table_location_zen.get() == 0xffff_ffff {
+            Err(Error::HeaderNotFound)
+        } else {
+            let directory = PspDirectory::new(&self.storage, embedded_firmware_structure.psp_directory_table_location_zen.get())?;
+            if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
+                Ok(directory)
+            } else {
+                Err(Error::Marshal)
+            }
         }
     }
 
+    /// Returns an iterator over level 1 BIOS directories
     pub fn bios_directories(&self, embedded_firmware_structure: &Efh) -> EfhBiosIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
         let positions = [embedded_firmware_structure.bios_directory_table_milan.get(), embedded_firmware_structure.bios_directory_tables[2].get(), embedded_firmware_structure.bios_directory_tables[1].get(), embedded_firmware_structure.bios_directory_tables[0].get()];
         EfhBiosIterator {

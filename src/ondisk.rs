@@ -157,13 +157,13 @@ impl Efh {
     }
 }
 
-#[derive(FromBytes, AsBytes, Unaligned)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct PspDirectoryHeader {
-    cookie: [u8; 4], // b"$PSP" or b"$PL2"
-    checksum: LU32, // 32-bit CRC value of header below this field and including all entries
-    total_entries: LU32,
-    additional_info: LU32, // 0xffff_ffff; or TODO: PSP Directory Table Additional Info Fields (9 bits: max size in blocks of 4 KiB; 4 bits: spi block size; 15 bits: [26:12] of Directory Image Base Address; 2 bits: address mode)
+    pub(crate) cookie: [u8; 4], // b"$PSP" or b"$PL2"
+    pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
+    pub(crate) total_entries: LU32,
+    pub(crate) additional_info: LU32, // 0xffff_ffff; or TODO: PSP Directory Table Additional Info Fields (9 bits: max size in blocks of 4 KiB; 4 bits: spi block size; 15 bits: [26:12] of Directory Image Base Address; 2 bits: address mode)
 }
 
 impl Default for PspDirectoryHeader {
