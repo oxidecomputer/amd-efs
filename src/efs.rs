@@ -8,11 +8,11 @@ use zerocopy::LayoutVerified;
 use crate::ondisk::header_from_collection_mut;
 
 // TODO: Borrow storage.
-pub struct Efs<T: FlashRead<0x1000> + FlashWrite<0x1000, 0x2_0000>> {
+pub struct Efs<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: T,
 }
 
-impl<T: FlashRead<0x1000> + FlashWrite<0x1000, 0x2_0000>> Efs<T> {
+impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Efs<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     pub fn load(storage: T) -> Result<Self> {
         Ok(Self {
             storage,
@@ -20,7 +20,7 @@ impl<T: FlashRead<0x1000> + FlashWrite<0x1000, 0x2_0000>> Efs<T> {
     }
     pub fn create(mut storage: T) -> Result<Self> {
         // FIXME
-        let mut buf: [u8; 4096] = [0xFF; 4096];
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
                 let efh: Efh = Efh::default();
@@ -36,7 +36,7 @@ impl<T: FlashRead<0x1000> + FlashWrite<0x1000, 0x2_0000>> Efs<T> {
     // TODO: Extra arguments to filter by version
     pub fn embedded_firmware_structure(&self) -> Result<Efh> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
-            let mut xbuf: [u8; 4096] = [0; 4096];
+            let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
 
             self.storage.read_block(*position, &mut xbuf)?;
             let item = LayoutVerified::<_, Efh>::new_from_prefix(&xbuf[..]);
