@@ -16,6 +16,17 @@ pub fn header_from_collection_mut<'a, T: Sized + FromBytes + AsBytes>(buf: &'a m
     }
 }
 
+/// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
+/// If the item cannot be parsed, returns None.
+pub fn header_from_collection<'a, T: Sized + FromBytes + AsBytes>(buf: &'a [u8]) -> Option<&'a T> {
+    match LayoutVerified::<_, T>::new_from_prefix(buf) {
+        Some((item, _xbuf)) => {
+            Some(item.into_ref())
+        },
+        None => None,
+    }
+}
+
 type LU16 = U16<LittleEndian>;
 type LU32 = U32<LittleEndian>;
 type LU64 = U64<LittleEndian>;
@@ -274,7 +285,7 @@ impl Default for PspDirectoryEntry {
     }
 }
 
-#[derive(FromBytes, AsBytes, Unaligned)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct BiosDirectoryHeader {
     pub cookie: LU32, // fourcc "$BHD" or "$BL2"
