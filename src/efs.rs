@@ -53,6 +53,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         Self::load(storage)
     }
     // TODO: Extra arguments to filter by version
+    // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again
     pub fn embedded_firmware_structure(&self) -> Result<Efh> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
@@ -63,7 +64,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 Some((item, _)) => {
                     let item = item.into_ref();
                     // TODO: item.compatible_with_processor_generation(0) for Milan; earlier processor generations don't have this, though.
-                    if item.signature.get() == 0x55AA55AA && item.second_gen_efs() {
+                    if item.signature.get() == 0x55AA55AA && item.second_gen_efs() { // note: only one Efh with second_gen_efs()==true allowed in entire Flash!
+                        // TODO: if (fuse_is_clear(FUSE_2ND_GEN_EFS) || check_2nd_gen_efs(offset)) check_2nd_gen_efs(offset) bit at 0x24
                         return Ok(*item);
                     }
                 },
