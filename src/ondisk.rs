@@ -263,7 +263,7 @@ pub enum PspDirectoryEntryType {
     MpmSecurityDriver = 0x89,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct PspDirectoryEntry {
     pub type_: u8,

@@ -1,12 +1,43 @@
 
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
+use core::mem::size_of;
+
+pub struct PspDirectoryIter<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
+    storage: &'a T,
+    beginning: Location, // current PspDirectoryEntry
+    end: Location,
+    header: PspDirectoryHeader,
+    index: u32,
+}
+
+impl<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for PspDirectoryIter<'a, T, RW_BLOCK_SIZE> {
+    type Item = PspDirectoryEntry;
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.index < self.header.total_entries.get() {
+            // This is very inefficient reading!
+            let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+            // FIXME: range check so we don't fall off the end!
+            let rw_block_size = RW_BLOCK_SIZE as u32;
+            self.storage.read_block(self.beginning - (self.beginning % rw_block_size), &mut buf).ok()?;
+            let beginning = self.beginning as usize;
+            let end = self.end as usize;
+            let buf = &buf[(beginning % RW_BLOCK_SIZE) .. (beginning % RW_BLOCK_SIZE) + size_of::<PspDirectoryEntry>()];
+            let result = header_from_collection::<PspDirectoryEntry>(buf)?; // TODO: Check for errors
+            self.beginning += size_of::<PspDirectoryEntry>() as u32; // FIXME: range check
+            self.index += 1;
+            Some(*result)
+        } else {
+            None
+        }
+    }
+}
 
 pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
@@ -54,6 +85,15 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
     }
     fn end(&self) -> Location {
         self.location // FIXME
+    }
+    pub fn entries(&self) -> PspDirectoryIter<T, RW_BLOCK_SIZE> {
+        PspDirectoryIter::<T, RW_BLOCK_SIZE> {
+            storage: self.storage,
+            beginning: self.beginning() + size_of::<PspDirectoryHeader>() as u32, // FIXME: range check
+            end: self.end(),
+            header: self.header,
+            index: 0u32,
+        }
     }
 }
 
