@@ -205,18 +205,23 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         })
     }
 
-    // Note: BEGINNING, END are coordinates (in Byte).
-    pub fn create_bios_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
-        if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
-            return Err(Error::Misaligned);
-        }
-        // Make sure there's no overlap (even when rounded to entire erasure blocks)
-        let psp_directory = self.psp_directory(embedded_firmware_structure)?;
-        let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.beginning(), psp_directory.end());
-        let intersection_beginning = beginning.max(reference_beginning);
-        let intersection_end = end.min(reference_end);
-        if intersection_beginning < intersection_end {
-            return Err(Error::Overlap);
+    // Make sure there's no overlap (even when rounded to entire erasure blocks)
+    fn ensure_no_overlap(&self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<()> {
+        let (beginning, end) = T::grow_to_erasure_block(beginning, end);
+        match self.psp_directory(embedded_firmware_structure) {
+            Ok(psp_directory) => {
+                let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.beginning(), psp_directory.end());
+                let intersection_beginning = beginning.max(reference_beginning);
+                let intersection_end = end.min(reference_end);
+                if intersection_beginning < intersection_end {
+                    return Err(Error::Overlap);
+                }
+            },
+            Err(Error::HeaderNotFound) => {
+            },
+            Err(e) => {
+                return Err(e);
+            },
         }
         let bios_directories = self.bios_directories(embedded_firmware_structure)?;
         for bios_directory in bios_directories {
@@ -227,6 +232,15 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(Error::Overlap);
             }
         }
+        Ok(())
+    }
+
+    // Note: BEGINNING, END are coordinates (in Byte).
+    pub fn create_bios_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
+            return Err(Error::Misaligned);
+        }
+        self.ensure_no_overlap(embedded_firmware_structure, beginning, end)?;
         let result = BiosDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
         if embedded_firmware_structure.compatible_with_processor_generation(ProcessorGeneration::Milan) {
             // FIXME: embedded_firmware_structure.bios_directory_table_milan.set(); ensure that the others are unset?
@@ -241,7 +255,6 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
         }
-        // Make sure there's no overlap (even when rounded to entire erasure blocks)
         match self.psp_directory(embedded_firmware_structure) {
             Err(Error::HeaderNotFound) => {
             },
@@ -253,15 +266,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(Error::Duplicate);
             }
         }
-        let bios_directories = self.bios_directories(embedded_firmware_structure)?;
-        for bios_directory in bios_directories {
-            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.beginning(), bios_directory.end());
-            let intersection_beginning = beginning.max(reference_beginning);
-            let intersection_end = end.min(reference_end);
-            if intersection_beginning < intersection_end {
-                return Err(Error::Overlap);
-            }
-        }
+        self.ensure_no_overlap(embedded_firmware_structure, beginning, end)?;
         let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
         // FIXME: embedded_firmware_structure.psp_directory_table_location_zen.set(); and self.storage.write_block(right location, efh)
         Ok(result)
