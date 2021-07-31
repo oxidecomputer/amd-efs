@@ -196,13 +196,13 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     }
 
     /// Returns an iterator over level 1 BIOS directories
-    pub fn bios_directories(&self, embedded_firmware_structure: &Efh) -> EfhBiosIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    pub fn bios_directories(&self, embedded_firmware_structure: &Efh) -> Result<EfhBiosIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         let positions = [embedded_firmware_structure.bios_directory_table_milan.get(), embedded_firmware_structure.bios_directory_tables[2].get(), embedded_firmware_structure.bios_directory_tables[1].get(), embedded_firmware_structure.bios_directory_tables[0].get()];
-        EfhBiosIterator {
+        Ok(EfhBiosIterator {
             storage: &self.storage,
             positions: positions,
             index_into_positions: 0,
-        }
+        })
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
@@ -215,7 +215,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         if intersection_beginning < intersection_end {
             return Err(Error::Overlap);
         }
-        let bios_directories = self.bios_directories(embedded_firmware_structure);
+        let bios_directories = self.bios_directories(embedded_firmware_structure)?;
         for bios_directory in bios_directories {
             let intersection_beginning = beginning.max(bios_directory.beginning());
             let intersection_end = end.min(bios_directory.end());
@@ -241,7 +241,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(Error::Duplicate);
             }
         }
-        let bios_directories = self.bios_directories(embedded_firmware_structure);
+        let bios_directories = self.bios_directories(embedded_firmware_structure)?;
         for bios_directory in bios_directories {
             let intersection_beginning = beginning.max(bios_directory.beginning());
             let intersection_end = end.min(bios_directory.end());
