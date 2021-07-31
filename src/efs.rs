@@ -185,7 +185,6 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         })
     }
     pub fn create(mut storage: T) -> Result<Self> {
-        // FIXME
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
