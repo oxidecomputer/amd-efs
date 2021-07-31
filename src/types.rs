@@ -6,6 +6,7 @@ pub enum Error {
     Marshal,
     Overlap,
     Duplicate,
+    Misaligned,
 }
 
 pub type Result<Q> = core::result::Result<Q, Error>;
