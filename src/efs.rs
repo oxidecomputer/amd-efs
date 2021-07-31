@@ -160,7 +160,6 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                         Some(x) => item.compatible_with_processor_generation(x),
                         None => true,
                     } {
-                        // TODO: if (fuse_is_clear(FUSE_2ND_GEN_EFS) || check_2nd_gen_efs(offset)) check_2nd_gen_efs(offset) bit at 0x24
                         return Ok(*item);
                     }
                 },
