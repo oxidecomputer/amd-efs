@@ -4,6 +4,8 @@ pub enum Error {
     IoError(amd_flash::Error),
     HeaderNotFound,
     Marshal,
+    Overlap,
+    Duplicate,
 }
 
 pub type Result<Q> = core::result::Result<Q, Error>;

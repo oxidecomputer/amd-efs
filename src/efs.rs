@@ -16,21 +16,41 @@ pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SI
 }
 
 impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    fn new(storage: &'a T, location: Location) -> Result<Self> {
-       let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-       storage.read_block(location, &mut xbuf)?;
-       let (item, _) = LayoutVerified::<_, PspDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
-       let header = item.into_ref();
-       if header.cookie == *b"$PSP" || header.cookie == *b"$PL2" {
-           Ok(Self {
-               storage,
-               location,
-               header: *header,
-           })
-       } else {
-           Err(Error::Marshal)
-       }
-   }
+    fn load(storage: &'a T, location: Location) -> Result<Self> {
+        let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+        storage.read_block(location, &mut xbuf)?;
+        let (item, _) = LayoutVerified::<_, PspDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
+        let header = item.into_ref();
+        if header.cookie == *b"$PSP" || header.cookie == *b"$PL2" {
+            Ok(Self {
+                storage,
+                location,
+                header: *header,
+            })
+        } else {
+            Err(Error::Marshal)
+        }
+    }
+    fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        match header_from_collection_mut(&mut buf[..]) {
+            Some(item) => {
+                *item = PspDirectoryHeader::default();
+                item.cookie = cookie;
+                storage.write_block(beginning, &buf)?;
+                Self::load(storage, beginning)
+            }
+            None => {
+                Err(Error::Marshal)
+            },
+        }
+    }
+    fn beginning(&self) -> Location {
+        self.location
+    }
+    fn end(&self) -> Location {
+        self.location // FIXME
+    }
 }
 
 pub struct BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
@@ -40,17 +60,37 @@ pub struct BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_S
 }
 
 impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> BiosDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    fn new(storage: &'a T, location: Location) -> Result<Self> {
-       let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-       storage.read_block(location, &mut xbuf)?;
-       let (item, _) = LayoutVerified::<_, BiosDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
-       let header = item.into_ref();
-       Ok(Self {
-           storage,
-           location,
-           header: *header,
-       })
-   }
+    fn load(storage: &'a T, location: Location) -> Result<Self> {
+        let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+        storage.read_block(location, &mut xbuf)?;
+        let (item, _) = LayoutVerified::<_, BiosDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
+        let header = item.into_ref();
+        Ok(Self {
+            storage,
+            location,
+            header: *header,
+        })
+    }
+    fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        match header_from_collection_mut(&mut buf[..]) {
+            Some(item) => {
+                *item = BiosDirectoryHeader::default();
+                item.cookie = cookie;
+                storage.write_block(beginning, &buf)?;
+                Self::load(storage, beginning)
+            }
+            None => {
+                Err(Error::Marshal)
+            },
+        }
+    }
+    fn beginning(&self) -> Location {
+        self.location
+    }
+    fn end(&self) -> Location {
+        self.location // FIXME
+    }
 }
 
 pub struct EfhBiosIterator<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
@@ -66,7 +106,7 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
            let position = self.positions[self.index_into_positions];
            self.index_into_positions += 1;
            if position != 0xffff_ffff && position != 0 /* sigh.  Some images have 0 as "invalid" mark */ {
-               match BiosDirectory::new(self.storage, position) {
+               match BiosDirectory::load(self.storage, position) {
                    Ok(e) => {
                        return Some(e);
                    },
@@ -136,7 +176,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         if embedded_firmware_structure.psp_directory_table_location_zen.get() == 0xffff_ffff {
             Err(Error::HeaderNotFound)
         } else {
-            let directory = PspDirectory::new(&self.storage, embedded_firmware_structure.psp_directory_table_location_zen.get())?;
+            let directory = PspDirectory::load(&self.storage, embedded_firmware_structure.psp_directory_table_location_zen.get())?;
             if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
                 Ok(directory)
             } else {
@@ -153,5 +193,52 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
             positions: positions,
             index_into_positions: 0,
         }
+    }
+
+    // Note: BEGINNING, END are coordinates (in Byte).
+    // Note: cookie: *b"$BHD" or *b"$BL2".
+    pub fn create_bios_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        // Make sure there's no overlap
+        let psp_directory = self.psp_directory(embedded_firmware_structure)?;
+        let intersection_beginning = beginning.max(psp_directory.beginning());
+        let intersection_end = end.min(psp_directory.end());
+        if intersection_beginning < intersection_end {
+            return Err(Error::Overlap);
+        }
+        let bios_directories = self.bios_directories(embedded_firmware_structure);
+        for bios_directory in bios_directories {
+            let intersection_beginning = beginning.max(bios_directory.beginning());
+            let intersection_end = end.min(bios_directory.end());
+            if intersection_beginning < intersection_end {
+                return Err(Error::Overlap);
+            }
+        }
+        BiosDirectory::create(&mut self.storage, beginning, end, cookie)
+    }
+
+    // Note: BEGINNING, END are coordinates (in Byte).
+    // Note: cookie: *b"$PSP" or *b"$PL2".
+    pub fn create_psp_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<PspDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        // Make sure there's no overlap
+        match self.psp_directory(embedded_firmware_structure) {
+            Err(Error::HeaderNotFound) => {
+            },
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(_) => {
+                // FIXME: Create level 2 PSP Directory
+                return Err(Error::Duplicate);
+            }
+        }
+        let bios_directories = self.bios_directories(embedded_firmware_structure);
+        for bios_directory in bios_directories {
+            let intersection_beginning = beginning.max(bios_directory.beginning());
+            let intersection_end = end.min(bios_directory.end());
+            if intersection_beginning < intersection_end {
+                return Err(Error::Overlap);
+            }
+        }
+        PspDirectory::create(&mut self.storage, beginning, end, cookie)
     }
 }
