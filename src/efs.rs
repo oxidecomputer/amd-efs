@@ -5,7 +5,6 @@ use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
-use zerocopy::LayoutVerified;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 
@@ -17,23 +16,28 @@ pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SI
 
 impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     fn load(storage: &'a T, location: Location) -> Result<Self> {
-        let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-        storage.read_block(location, &mut xbuf)?;
-        let (item, _) = LayoutVerified::<_, PspDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
-        let header = item.into_ref();
-        if header.cookie == *b"$PSP" || header.cookie == *b"$PL2" {
-            Ok(Self {
-                storage,
-                location,
-                header: *header,
-            })
-        } else {
-            Err(Error::Marshal)
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+        storage.read_block(location, &mut buf)?;
+        match header_from_collection::<PspDirectoryHeader>(&buf[..]) {
+            Some(header) => {
+                if header.cookie == *b"$PSP" || header.cookie == *b"$PL2" {
+                     Ok(Self {
+                         storage,
+                         location,
+                         header: *header,
+                     })
+                } else {
+                     Err(Error::Marshal)
+                }
+            },
+            None => {
+                Err(Error::Marshal)
+            },
         }
     }
     fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
-        match header_from_collection_mut(&mut buf[..]) {
+        match header_from_collection_mut::<PspDirectoryHeader>(&mut buf[..]) {
             Some(item) => {
                 *item = PspDirectoryHeader::default();
                 item.cookie = cookie;
@@ -61,19 +65,28 @@ pub struct BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_S
 
 impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> BiosDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     fn load(storage: &'a T, location: Location) -> Result<Self> {
-        let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-        storage.read_block(location, &mut xbuf)?;
-        let (item, _) = LayoutVerified::<_, BiosDirectoryHeader>::new_from_prefix(&xbuf[..]).ok_or_else(|| Error::Marshal)?;
-        let header = item.into_ref();
-        Ok(Self {
-            storage,
-            location,
-            header: *header,
-        })
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+        storage.read_block(location, &mut buf)?;
+        match header_from_collection::<BiosDirectoryHeader>(&buf[..]) {
+            Some(header) => {
+                if header.cookie == *b"$BHD" || header.cookie == *b"$BL2" {
+                     Ok(Self {
+                         storage,
+                         location,
+                         header: *header,
+                     })
+                } else {
+                     Err(Error::Marshal)
+                }
+            },
+            None => {
+                Err(Error::Marshal)
+            },
+        }
     }
     fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
-        match header_from_collection_mut(&mut buf[..]) {
+        match header_from_collection_mut::<BiosDirectoryHeader>(&mut buf[..]) {
             Some(item) => {
                 *item = BiosDirectoryHeader::default();
                 item.cookie = cookie;
@@ -151,10 +164,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
             self.storage.read_block(*position, &mut xbuf)?;
-            let item = LayoutVerified::<_, Efh>::new_from_prefix(&xbuf[..]);
-            match item {
-                Some((item, _)) => {
-                    let item = item.into_ref();
+            match header_from_collection::<Efh>(&xbuf[..]) {
+                Some(item) => {
                     // Note: only one Efh with second_gen_efs()==true allowed in entire Flash!
                     if item.signature.get() == 0x55AA55AA && item.second_gen_efs() && match processor_generation {
                         Some(x) => item.compatible_with_processor_generation(x),
