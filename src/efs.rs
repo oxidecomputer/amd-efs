@@ -206,8 +206,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
-    // Note: cookie: *b"$BHD" or *b"$BL2".
-    pub fn create_bios_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+    pub fn create_bios_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         // Make sure there's no overlap
         let psp_directory = self.psp_directory(embedded_firmware_structure)?;
         let intersection_beginning = beginning.max(psp_directory.beginning());
@@ -223,12 +222,17 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(Error::Overlap);
             }
         }
-        BiosDirectory::create(&mut self.storage, beginning, end, cookie)
+        let result = BiosDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
+        if embedded_firmware_structure.compatible_with_processor_generation(ProcessorGeneration::Milan) {
+            // FIXME: embedded_firmware_structure.bios_directory_table_milan.set(); ensure that the others are unset?
+        } else {
+            // FIXME: embedded_firmware_structure.bios_directory_tables[2].set() or embedded_firmware_structure.bios_directory_tables[1].set() or embedded_firmware_structure.bios_directory_tables[0].set()
+        }
+        Ok(result)
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
-    // Note: cookie: *b"$PSP" or *b"$PL2".
-    pub fn create_psp_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<PspDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+    pub fn create_psp_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<PspDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         // Make sure there's no overlap
         match self.psp_directory(embedded_firmware_structure) {
             Err(Error::HeaderNotFound) => {
@@ -249,6 +253,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(Error::Overlap);
             }
         }
-        PspDirectory::create(&mut self.storage, beginning, end, cookie)
+        let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
+        // FIXME: embedded_firmware_structure.psp_directory_table_location_zen.set(); and self.storage.write_block(right location, efh)
+        Ok(result)
     }
 }
