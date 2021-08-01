@@ -291,7 +291,7 @@ pub struct BiosDirectoryHeader {
     pub cookie: [u8; 4], // b"$BHD" or b"$BL2"
     pub checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     pub total_entry_count: LU32,
-    _reserved: LU32,
+    additional_info: LU32,
 }
 
 impl Default for BiosDirectoryHeader {
@@ -300,7 +300,7 @@ impl Default for BiosDirectoryHeader {
             cookie: *b"    ", // invalid
             checksum: 0.into(), // invalid
             total_entry_count: 0.into(),
-            _reserved: 0xffff_ffff.into(), // invalid
+            additional_info: 0xffff_ffff.into(), // invalid
         }
     }
 }
