@@ -185,13 +185,13 @@ pub enum PspDirectoryEntryType {
     PspOs = 0x02,
     PspRecoveryBootloader = 0x03,
     PspNvdata = 0x04,
-    SmuOffChipFirmware_8 = 0x08,
+    SmuOffChipFirmware8 = 0x08,
     AmdSecureDebugKey = 0x09,
     AblPublicKey = 0x0A,
     PspSoftFuseChain = 0x0B,
     PspTrustlets = 0x0C,
     PspTrustletPublicKey = 0x0D,
-    SmuOffChipFirmware_12 = 0x12,
+    SmuOffChipFirmware12 = 0x12,
     PspEarlySecureUnlockDebugImage = 0x13,
     DiscoveryBinary = 0x20,
     WrappedIkek = 0x21,
@@ -205,7 +205,7 @@ pub enum PspDirectoryEntryType {
     Mp5Firmware = 0x2A,
     EfsPhysAddr = 0x2B,
     TeeWriteOnceNvram = 0x2C,
-    ExternalChipsetPspBootLoader_2D = 0x2D,
+    ExternalChipsetPspBootLoader2d = 0x2D,
     ExternalChipsetMp0Dxio = 0x2E,
     ExternalChipsetMp1Firmware = 0x2F,
     Abl0 = 0x30,
@@ -230,7 +230,7 @@ pub enum PspDirectoryEntryType {
     DxioPhySramPublicKey = 0x43,
     UsbUnifiedPhyFirmware = 0x44,
     TosSecurityPolicyBinary = 0x45,
-    ExternalChipsetPspBootloader_46 = 0x46,
+    ExternalChipsetPspBootloader46 = 0x46,
     DrtmTa = 0x47,
     L2aPspDirectory = 0x48,
     L2BiosDirectory = 0x49,
@@ -270,7 +270,7 @@ pub struct PspDirectoryEntry {
     pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
     _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
-    value_or_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits)
+    value_or_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits) or 0
 }
 
 impl Default for PspDirectoryEntry {
