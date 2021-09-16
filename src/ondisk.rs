@@ -388,6 +388,7 @@ impl core::fmt::Debug for BiosDirectoryEntry {
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
         let destination_location = self.destination_location.get();
+        let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
         fmt.debug_struct("BiosDirectoryEntry")
            .field("type_", &type_)
            .field("region_type", &self.region_type) // FIXME
