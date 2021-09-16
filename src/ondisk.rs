@@ -161,7 +161,7 @@ impl Efh {
 
 #[bitfield(bits = 32)]
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct DirectoryAdditionalInfo {
     pub max_size: B10, // directory size in 4 KiB; Note: doc error in AMD docs
     pub spi_block_size: B4, // spi block size in 4 KiB
@@ -172,7 +172,7 @@ pub struct DirectoryAdditionalInfo {
 }
 
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct PspDirectoryHeader {
     pub(crate) cookie: [u8; 4], // b"$PSP" or b"$PL2"
@@ -189,6 +189,20 @@ impl Default for PspDirectoryHeader {
             total_entries: 0.into(),
             additional_info: 0xffff_ffff.into(), // invalid
         }
+    }
+}
+
+impl core::fmt::Debug for PspDirectoryHeader {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let checksum = self.checksum.get();
+        let total_entries = self.total_entries.get();
+        let additional_info = DirectoryAdditionalInfo::from(self.additional_info.get());
+        fmt.debug_struct("PspDirectoryHeader")
+           .field("cookie", &self.cookie)
+           .field("checksum", &checksum)
+           .field("total_entries", &total_entries)
+           .field("additional_info", &additional_info)
+           .finish()
     }
 }
 
