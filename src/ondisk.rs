@@ -384,13 +384,20 @@ pub enum BiosDirectoryEntryType {
     SecondLevelDirectory = 0x70, // also a BiosDirectory
 }
 
+#[derive(Copy, Clone, Debug, FromPrimitive)]
+pub enum BiosDirectoryEntryRegionType {
+    Normal = 0,
+    Ta1 = 1,
+    Ta2 = 2,
+}
+
 #[bitfield(bits = 8, filled = true)]
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub struct BiosDirectoryEntryFlags {
     pub reset_image: bool,
     pub copy_image: bool,
-    pub read_only: bool,
+    pub read_only: bool, // only useful for region_type > 0
     pub compressed: bool,
     pub instance: B4,
 }
@@ -424,6 +431,7 @@ impl Default for BiosDirectoryEntry {
 impl core::fmt::Debug for BiosDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let type_ = BiosDirectoryEntryType::from_u8(self.type_);
+        let region_type = BiosDirectoryEntryRegionType::from_u8(self.region_type);
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
         let destination_location = self.destination_location.get();
@@ -431,7 +439,7 @@ impl core::fmt::Debug for BiosDirectoryEntry {
         let flags = BiosDirectoryEntryFlags::from(self.flags);
         fmt.debug_struct("BiosDirectoryEntry")
            .field("type_", &type_)
-           .field("region_type", &self.region_type) // FIXME
+           .field("region_type", &region_type)
            .field("flags", &flags)
            .field("sub_program", &self.sub_program)
            .field("size", &size)
