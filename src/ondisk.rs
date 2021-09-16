@@ -3,6 +3,7 @@
 use byteorder::LittleEndian;
 use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use amd_flash::Location;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
 
@@ -340,7 +341,7 @@ pub enum BiosDirectoryEntryType {
     SecondLevelDirectory = 0x70, // also a BiosDirectory
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct BiosDirectoryEntry {
     pub type_: u8, // TODO: enum
@@ -363,6 +364,24 @@ impl Default for BiosDirectoryEntry {
             value_or_source_location: 0.into(),
             destination_location: 0xffff_ffff_ffff_ffff.into(),
         }
+    }
+}
+
+impl core::fmt::Debug for BiosDirectoryEntry {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let type_ = BiosDirectoryEntryType::from_u8(self.type_);
+        let size = self.size.get();
+        let value_or_source_location = self.value_or_source_location.get();
+        let destination_location = self.destination_location.get();
+        fmt.debug_struct("BiosDirectoryEntry")
+           .field("type_", &type_)
+           .field("region_type", &self.region_type) // FIXME
+           .field("flags", &self.flags) // FIXME
+           .field("sub_program", &self.sub_program)
+           .field("size", &size)
+           .field("value_or_source_location", &value_or_source_location)
+           .field("destination_location", &destination_location)
+           .finish()
     }
 }
 
