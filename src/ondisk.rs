@@ -319,7 +319,7 @@ impl core::fmt::Debug for PspDirectoryEntry {
         let type_ = PspDirectoryEntryType::from_u8(self.type_);
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
-        fmt.debug_struct("BiosDirectoryEntry")
+        fmt.debug_struct("PspDirectoryEntry")
            .field("type_", &type_)
            .field("sub_program", &self.sub_program)
            .field("size", &size)
