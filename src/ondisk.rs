@@ -1,6 +1,7 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
 use byteorder::LittleEndian;
+use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
 use amd_flash::Location;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
@@ -157,13 +158,26 @@ impl Efh {
     }
 }
 
+#[bitfield(bits = 32)]
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub struct DirectoryAdditionalInfo {
+    pub max_size: B10, // directory size in 4 KiB; Note: doc error in AMD docs
+    pub spi_block_size: B4, // spi block size in 4 KiB
+    pub base_address: B15, // base address in 4 KiB
+    pub address_mode: B2, // 0: physical memory address; 1: address relative to the entire BIOS image; 2: address relative to base_address above FIXME is that true?; 3: TODO
+    #[skip]
+    __: bool,
+}
+
+
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct PspDirectoryHeader {
     pub(crate) cookie: [u8; 4], // b"$PSP" or b"$PL2"
     pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     pub(crate) total_entries: LU32,
-    pub(crate) additional_info: LU32, // 0xffff_ffff; or TODO: PSP Directory Table Additional Info Fields (9 bits: max size in blocks of 4 KiB; 4 bits: spi block size; 15 bits: [26:12] of Directory Image Base Address; 2 bits: address mode)
+    pub(crate) additional_info: LU32, // 0xffff_ffff; or DirectoryAdditionalInfo
 }
 
 impl Default for PspDirectoryHeader {
