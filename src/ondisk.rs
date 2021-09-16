@@ -384,6 +384,17 @@ pub enum BiosDirectoryEntryType {
     SecondLevelDirectory = 0x70, // also a BiosDirectory
 }
 
+#[bitfield(bits = 8, filled = true)]
+#[repr(u8)]
+#[derive(Copy, Clone, Debug)]
+pub struct BiosDirectoryEntryFlags {
+    pub reset_image: bool,
+    pub copy_image: bool,
+    pub read_only: bool,
+    pub compressed: bool,
+    pub instance: B4,
+}
+
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct BiosDirectoryEntry {
@@ -417,10 +428,11 @@ impl core::fmt::Debug for BiosDirectoryEntry {
         let value_or_source_location = self.value_or_source_location.get();
         let destination_location = self.destination_location.get();
         let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
+        let flags = BiosDirectoryEntryFlags::from(self.flags);
         fmt.debug_struct("BiosDirectoryEntry")
            .field("type_", &type_)
            .field("region_type", &self.region_type) // FIXME
-           .field("flags", &self.flags) // FIXME
+           .field("flags", &flags)
            .field("sub_program", &self.sub_program)
            .field("size", &size)
            .field("value_or_source_location", &value_or_source_location)
