@@ -391,8 +391,8 @@ pub enum BiosDirectoryEntryRegionType {
     Ta2 = 2,
 }
 
-#[bitfield(bits = 8, filled = true)]
-#[repr(u8)]
+#[bitfield(bits = 16, filled = true)]
+#[repr(u16)]
 #[derive(Copy, Clone, Debug)]
 pub struct BiosDirectoryEntryFlags {
     pub reset_image: bool,
@@ -400,6 +400,9 @@ pub struct BiosDirectoryEntryFlags {
     pub read_only: bool, // only useful for region_type > 0
     pub compressed: bool,
     pub instance: B4,
+    pub sub_program: B3, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
+    pub rom_id: B2,
+    #[skip] __: B3,
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
@@ -407,8 +410,7 @@ pub struct BiosDirectoryEntryFlags {
 pub struct BiosDirectoryEntry {
     pub type_: u8, // TODO: enum
     pub region_type: u8,
-    pub flags: u8,
-    pub sub_program: u8, // and reserved; function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
+    pub flags: LU16,
     size: LU32,
     value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
@@ -419,8 +421,7 @@ impl Default for BiosDirectoryEntry {
         Self {
             type_: 0xff,
             region_type: 0,
-            flags: 0,
-            sub_program: 0,
+            flags: 0.into(),
             size: 0.into(),
             value_or_source_location: 0.into(),
             destination_location: 0xffff_ffff_ffff_ffff.into(),
@@ -436,12 +437,11 @@ impl core::fmt::Debug for BiosDirectoryEntry {
         let value_or_source_location = self.value_or_source_location.get();
         let destination_location = self.destination_location.get();
         let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
-        let flags = BiosDirectoryEntryFlags::from(self.flags);
+        let flags = BiosDirectoryEntryFlags::from(self.flags.get());
         fmt.debug_struct("BiosDirectoryEntry")
            .field("type_", &type_)
            .field("region_type", &region_type)
            .field("flags", &flags)
-           .field("sub_program", &self.sub_program)
            .field("size", &size)
            .field("value_or_source_location", &value_or_source_location)
            .field("destination_location", &destination_location)
