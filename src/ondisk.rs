@@ -329,7 +329,7 @@ impl core::fmt::Debug for PspDirectoryEntry {
 }
 
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct BiosDirectoryHeader {
     pub cookie: [u8; 4], // b"$BHD" or b"$BL2"
@@ -346,6 +346,20 @@ impl Default for BiosDirectoryHeader {
             total_entries: 0.into(),
             additional_info: 0xffff_ffff.into(), // invalid
         }
+    }
+}
+
+impl core::fmt::Debug for BiosDirectoryHeader {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let checksum = self.checksum.get();
+        let total_entries = self.total_entries.get();
+        let additional_info = DirectoryAdditionalInfo::from(self.additional_info.get());
+        fmt.debug_struct("PspDirectoryHeader")
+           .field("cookie", &self.cookie)
+           .field("checksum", &checksum)
+           .field("total_entries", &total_entries)
+           .field("additional_info", &additional_info)
+           .finish()
     }
 }
 
