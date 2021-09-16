@@ -1,7 +1,7 @@
 
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -97,6 +97,36 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
     }
 }
 
+pub struct BiosDirectoryIter<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
+    storage: &'a T,
+    beginning: Location, // current BiosDirectoryEntry
+    end: Location,
+    header: BiosDirectoryHeader,
+    index: u32,
+}
+
+impl<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for BiosDirectoryIter<'a, T, RW_BLOCK_SIZE> {
+    type Item = BiosDirectoryEntry;
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.index < self.header.total_entries.get() {
+            // This is very inefficient reading!
+            let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+            // FIXME: range check so we don't fall off the end!
+            let rw_block_size = RW_BLOCK_SIZE as u32;
+            self.storage.read_block(self.beginning - (self.beginning % rw_block_size), &mut buf).ok()?;
+            let beginning = self.beginning as usize;
+            let end = self.end as usize;
+            let buf = &buf[(beginning % RW_BLOCK_SIZE) .. (beginning % RW_BLOCK_SIZE) + size_of::<BiosDirectoryEntry>()];
+            let result = header_from_collection::<BiosDirectoryEntry>(buf)?; // TODO: Check for errors
+            self.beginning += size_of::<BiosDirectoryEntry>() as u32; // FIXME: range check
+            self.index += 1;
+            Some(*result)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
     location: Location,
@@ -143,6 +173,15 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
     }
     fn end(&self) -> Location {
         self.location // FIXME
+    }
+    pub fn entries(&self) -> BiosDirectoryIter<T, RW_BLOCK_SIZE> {
+        BiosDirectoryIter::<T, RW_BLOCK_SIZE> {
+            storage: self.storage,
+            beginning: self.beginning() + size_of::<BiosDirectoryHeader>() as u32, // FIXME: range check
+            end: self.end(),
+            header: self.header,
+            index: 0u32,
+        }
     }
 }
 
