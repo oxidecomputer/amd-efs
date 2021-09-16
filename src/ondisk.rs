@@ -278,14 +278,14 @@ pub enum PspDirectoryEntryType {
     MpmSecurityDriver = 0x89,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct PspDirectoryEntry {
     pub type_: u8,
     pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
     _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
-    value_or_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits) or 0
+    value_or_source_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits) or 0
 }
 
 impl Default for PspDirectoryEntry {
@@ -295,10 +295,25 @@ impl Default for PspDirectoryEntry {
             sub_program: 0.into(),
             _reserved: 0.into(),
             size: 0.into(),
-            value_or_location: 0.into(),
+            value_or_source_location: 0.into(),
         }
     }
 }
+
+impl core::fmt::Debug for PspDirectoryEntry {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let type_ = PspDirectoryEntryType::from_u8(self.type_);
+        let size = self.size.get();
+        let value_or_source_location = self.value_or_source_location.get();
+        fmt.debug_struct("BiosDirectoryEntry")
+           .field("type_", &type_)
+           .field("sub_program", &self.sub_program)
+           .field("size", &size)
+           .field("value_or_source_location", &value_or_source_location)
+           .finish()
+    }
+}
+
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 #[repr(C, packed)]
