@@ -215,7 +215,8 @@ impl core::fmt::Debug for PspDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[bits = 8]
 pub enum PspDirectoryEntryType {
     AmdPublicKey = 0x00,
     PspBootloader = 0x01,
@@ -306,12 +307,21 @@ pub enum ValueOrLocation {
     Location(u64),
 }
 
+#[bitfield(bits = 32)]
+#[repr(u32)]
+#[derive(Copy, Clone, Debug)]
+pub struct PspDirectoryEntryAttrs {
+    #[bits = 8]
+    pub type_: PspDirectoryEntryType,
+    pub sub_program: B8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
+    pub rom_id: B2, // romid
+    #[skip] __: B14,
+}
+
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct PspDirectoryEntry {
-    pub type_: u8,
-    pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
-    _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
+    pub attrs: LU32,
     size: LU32,
     source: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
 }
@@ -319,9 +329,7 @@ pub struct PspDirectoryEntry {
 impl Default for PspDirectoryEntry {
     fn default() -> Self {
         Self {
-            type_: 0.into(),
-            sub_program: 0.into(),
-            _reserved: 0.into(),
+            attrs: 0.into(),
             size: 0.into(),
             source: 0.into(),
         }
@@ -330,17 +338,13 @@ impl Default for PspDirectoryEntry {
 
 impl core::fmt::Debug for PspDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let type_ = PspDirectoryEntryType::from_u8(self.type_);
+        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
         let size = self.size.get();
         let source = self.source.get();
         let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
         let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
         fmt.debug_struct("PspDirectoryEntry")
-           .field("type_", match type_ {
-               None => &self.type_,
-               Some(_) => &type_
-           })
-           .field("sub_program", &self.sub_program)
+           .field("attrs", &attrs)
            .field("size", &size)
            .field("source", &source)
            .finish()
