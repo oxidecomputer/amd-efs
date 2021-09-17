@@ -334,6 +334,7 @@ impl core::fmt::Debug for PspDirectoryEntry {
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
         let value_or_source_location = if size == 0xFFFF_FFFF { ValueOrLocation::Value(value_or_source_location) } else { ValueOrLocation::Location(value_or_source_location) };
+        let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
         fmt.debug_struct("PspDirectoryEntry")
            .field("type_", &type_)
            .field("sub_program", &self.sub_program)
@@ -454,6 +455,7 @@ impl core::fmt::Debug for BiosDirectoryEntry {
         let destination_location = self.destination_location.get();
         let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
         let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
         fmt.debug_struct("BiosDirectoryEntry")
            .field("attrs", &attrs)
            .field("size", &size)
