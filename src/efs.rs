@@ -256,26 +256,72 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 },
             }
         }
+        // Old firmware header is better than no firmware header; TODO: Warn.
+        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
+            let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+            self.storage.read_block(*position, &mut xbuf)?;
+            match header_from_collection::<Efh>(&xbuf[..]) {
+                Some(item) => {
+                    if item.signature.get() == 0x55AA55AA && !item.second_gen_efs() && match processor_generation {
+                        //Some(x) => item.compatible_with_processor_generation(x),
+                        None => true,
+                        _ => false,
+                    } {
+                        return Ok(*item);
+                    }
+                },
+                None => {
+                },
+            }
+        }
         Err(Error::HeaderNotFound)
     }
 
     pub fn psp_directory(&self, embedded_firmware_structure: &Efh) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-        if embedded_firmware_structure.psp_directory_table_location_zen.get() == 0xffff_ffff {
+        let psp_directory_table_location = embedded_firmware_structure.psp_directory_table_location_zen.get();
+        if psp_directory_table_location == 0xffff_ffff {
             Err(Error::HeaderNotFound)
         } else {
-            let directory = PspDirectory::load(&self.storage, embedded_firmware_structure.psp_directory_table_location_zen.get())?;
-            if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
-                Ok(directory)
+            let directory = match PspDirectory::load(&self.storage, psp_directory_table_location) {
+                Ok(directory) => {
+                    if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
+                        return Ok(directory);
+                    }
+                },
+                Err(Error::Marshal) => {
+                },
+                Err(e) => {
+                    return Err(e);
+                },
+            };
+
+            // That's the same fallback AMD does on Naples:
+
+            let psp_directory_table_location = {
+                let addr = embedded_firmware_structure.psp_directory_table_location_naples.get();
+                if addr == 0xffff_ffff {
+                    addr
+                } else {
+                    addr & 0x00ff_ffff
+                }
+            };
+            if psp_directory_table_location == 0xffff_ffff {
+                Err(Error::HeaderNotFound)
             } else {
-                Err(Error::Marshal)
+                let directory = PspDirectory::load(&self.storage, psp_directory_table_location)?;
+                if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
+                    Ok(directory)
+                } else {
+                    Err(Error::Marshal)
+                }
             }
         }
     }
 
     /// Returns an iterator over level 1 BIOS directories
     pub fn bios_directories(&self, embedded_firmware_structure: &Efh) -> Result<EfhBiosIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
-        let positions = [embedded_firmware_structure.bios_directory_table_milan.get(), embedded_firmware_structure.bios_directory_tables[2].get(), embedded_firmware_structure.bios_directory_tables[1].get(), embedded_firmware_structure.bios_directory_tables[0].get()];
+        let positions = [embedded_firmware_structure.bios_directory_table_milan.get(), embedded_firmware_structure.bios_directory_tables[2].get() & 0x00ff_ffff, embedded_firmware_structure.bios_directory_tables[1].get() & 0x00ff_ffff, embedded_firmware_structure.bios_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
         Ok(EfhBiosIterator {
             storage: &self.storage,
             positions: positions,
