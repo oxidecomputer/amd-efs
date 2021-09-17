@@ -162,9 +162,9 @@ impl Efh {
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
 pub enum AddressMode {
     PhysicalAddress = 0,
-    EfsRelativeOffset = 1,
-    DirectoryRelativeOffset = 2,
-    Reserved = 3,
+    EfsRelativeOffset = 1, // x
+    DirectoryRelativeOffset = 2, // (x - Base)
+    ImageBaseRelativeOffset = 3, // x; ImageBaseRelativeOffset == DirectoryRelativeOffset; not Base
 }
 
 #[bitfield(bits = 32)]
@@ -307,7 +307,7 @@ pub struct PspDirectoryEntry {
     pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
     _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
-    value_or_source_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (2 bits), or 0
+    value_or_source_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
 }
 
 impl Default for PspDirectoryEntry {
@@ -423,8 +423,8 @@ pub struct BiosDirectoryEntryAttrs {
 #[repr(C, packed)]
 pub struct BiosDirectoryEntry {
     pub attrs: LU32,
-    size: LU32,
-    value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (2 bits), or 0
+    size: LU32, // 0xFFFF_FFFF for value entry
+    value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
 }
 
@@ -439,10 +439,17 @@ impl Default for BiosDirectoryEntry {
     }
 }
 
+#[derive(Debug)]
+pub enum ValueOrLocation {
+    Value(u64),
+    Location(u64),
+}
+
 impl core::fmt::Debug for BiosDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
+        let value_or_source_location = if size == 0xFFFF_FFFF { ValueOrLocation::Value(value_or_source_location) } else { ValueOrLocation::Location(value_or_source_location) };
         let destination_location = self.destination_location.get();
         let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
         let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
