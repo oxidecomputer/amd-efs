@@ -300,6 +300,12 @@ pub enum PspDirectoryEntryType {
     MpmSecurityDriver = 0x89,
 }
 
+#[derive(Debug)]
+pub enum ValueOrLocation {
+    Value(u64),
+    Location(u64),
+}
+
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct PspDirectoryEntry {
@@ -327,6 +333,7 @@ impl core::fmt::Debug for PspDirectoryEntry {
         let type_ = PspDirectoryEntryType::from_u8(self.type_);
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
+        let value_or_source_location = if size == 0xFFFF_FFFF { ValueOrLocation::Value(value_or_source_location) } else { ValueOrLocation::Location(value_or_source_location) };
         fmt.debug_struct("PspDirectoryEntry")
            .field("type_", &type_)
            .field("sub_program", &self.sub_program)
@@ -437,12 +444,6 @@ impl Default for BiosDirectoryEntry {
             destination_location: 0xffff_ffff_ffff_ffff.into(),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ValueOrLocation {
-    Value(u64),
-    Location(u64),
 }
 
 impl core::fmt::Debug for BiosDirectoryEntry {
