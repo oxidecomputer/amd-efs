@@ -159,6 +159,14 @@ impl Efh {
     }
 }
 
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+pub enum AddressMode {
+    PhysicalAddress = 0,
+    EfsRelativeOffset = 1,
+    DirectoryRelativeOffset = 2,
+    Reserved = 3,
+}
+
 #[bitfield(bits = 32)]
 #[repr(u32)]
 #[derive(Copy, Clone, Debug)]
@@ -166,11 +174,11 @@ pub struct DirectoryAdditionalInfo {
     pub max_size: B10, // directory size in 4 KiB; Note: doc error in AMD docs
     pub spi_block_size: B4, // spi block size in 4 KiB
     pub base_address: B15, // base address in 4 KiB
-    pub address_mode: B2, // 0: physical memory address; 1: address relative to the entire BIOS image; 2: address relative to base_address above FIXME is that true?; 3: TODO
+    #[bits = 2]
+    pub address_mode: AddressMode,
     #[skip]
     __: bool,
 }
-
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
@@ -299,7 +307,7 @@ pub struct PspDirectoryEntry {
     pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
     _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
-    value_or_source_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (sometimes) entry address mode (2 bits) or 0
+    value_or_source_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (2 bits), or 0
 }
 
 impl Default for PspDirectoryEntry {
@@ -416,7 +424,7 @@ pub struct BiosDirectoryEntryAttrs {
 pub struct BiosDirectoryEntry {
     pub attrs: LU32,
     size: LU32,
-    value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location
+    value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (2 bits), or 0
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
 }
 
