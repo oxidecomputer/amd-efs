@@ -175,7 +175,7 @@ pub struct DirectoryAdditionalInfo {
     pub spi_block_size: B4, // spi block size in 4 KiB
     pub base_address: B15, // base address in 4 KiB
     #[bits = 2]
-    pub address_mode: AddressMode,
+    pub address_mode: AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
     #[skip]
     __: bool,
 }
@@ -336,7 +336,10 @@ impl core::fmt::Debug for PspDirectoryEntry {
         let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
         let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
         fmt.debug_struct("PspDirectoryEntry")
-           .field("type_", &type_)
+           .field("type_", match type_ {
+               None => &self.type_,
+               Some(_) => &type_
+           })
            .field("sub_program", &self.sub_program)
            .field("size", &size)
            .field("source", &source)
