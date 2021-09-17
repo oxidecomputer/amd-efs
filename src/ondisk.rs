@@ -364,7 +364,8 @@ impl core::fmt::Debug for BiosDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[bits = 8]
 pub enum BiosDirectoryEntryType {
     OemPublicKey = 0x05,
     CryptographicSignature = 0x07,
@@ -384,17 +385,22 @@ pub enum BiosDirectoryEntryType {
     SecondLevelDirectory = 0x70, // also a BiosDirectory
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive)]
+#[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier)]
+#[bits = 8]
 pub enum BiosDirectoryEntryRegionType {
     Normal = 0,
     Ta1 = 1,
     Ta2 = 2,
 }
 
-#[bitfield(bits = 16, filled = true)]
-#[repr(u16)]
+#[bitfield(bits = 32)]
+#[repr(u32)]
 #[derive(Copy, Clone, Debug)]
-pub struct BiosDirectoryEntryFlags {
+pub struct BiosDirectoryEntryAttrs {
+    #[bits = 8]
+    pub type_: BiosDirectoryEntryType,
+    #[bits = 8]
+    pub region_type: BiosDirectoryEntryRegionType,
     pub reset_image: bool,
     pub copy_image: bool,
     pub read_only: bool, // only useful for region_type > 0
@@ -408,9 +414,7 @@ pub struct BiosDirectoryEntryFlags {
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct BiosDirectoryEntry {
-    pub type_: u8, // TODO: enum
-    pub region_type: u8,
-    pub flags: LU16,
+    pub attrs: LU32,
     size: LU32,
     value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
@@ -419,9 +423,7 @@ pub struct BiosDirectoryEntry {
 impl Default for BiosDirectoryEntry {
     fn default() -> Self {
         Self {
-            type_: 0xff,
-            region_type: 0,
-            flags: 0.into(),
+            attrs: 0.into(),
             size: 0.into(),
             value_or_source_location: 0.into(),
             destination_location: 0xffff_ffff_ffff_ffff.into(),
@@ -431,17 +433,13 @@ impl Default for BiosDirectoryEntry {
 
 impl core::fmt::Debug for BiosDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let type_ = BiosDirectoryEntryType::from_u8(self.type_);
-        let region_type = BiosDirectoryEntryRegionType::from_u8(self.region_type);
         let size = self.size.get();
         let value_or_source_location = self.value_or_source_location.get();
         let destination_location = self.destination_location.get();
         let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
-        let flags = BiosDirectoryEntryFlags::from(self.flags.get());
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
         fmt.debug_struct("BiosDirectoryEntry")
-           .field("type_", &type_)
-           .field("region_type", &region_type)
-           .field("flags", &flags)
+           .field("attrs", &attrs)
            .field("size", &size)
            .field("value_or_source_location", &value_or_source_location)
            .field("destination_location", &destination_location)
