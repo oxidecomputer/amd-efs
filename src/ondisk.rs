@@ -370,7 +370,7 @@ impl core::fmt::Debug for BiosDirectoryHeader {
         let checksum = self.checksum.get();
         let total_entries = self.total_entries.get();
         let additional_info = DirectoryAdditionalInfo::from(self.additional_info.get());
-        fmt.debug_struct("PspDirectoryHeader")
+        fmt.debug_struct("BiosDirectoryHeader")
            .field("cookie", &self.cookie)
            .field("checksum", &checksum)
            .field("total_entries", &total_entries)
