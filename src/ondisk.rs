@@ -313,7 +313,7 @@ pub struct PspDirectoryEntry {
     pub sub_program: u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
     _reserved: LU16, // TODO: rom_id: u2; remainder: reserved
     size: LU32,
-    value_or_source_location: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+    source: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
 }
 
 impl Default for PspDirectoryEntry {
@@ -323,7 +323,7 @@ impl Default for PspDirectoryEntry {
             sub_program: 0.into(),
             _reserved: 0.into(),
             size: 0.into(),
-            value_or_source_location: 0.into(),
+            source: 0.into(),
         }
     }
 }
@@ -332,14 +332,14 @@ impl core::fmt::Debug for PspDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let type_ = PspDirectoryEntryType::from_u8(self.type_);
         let size = self.size.get();
-        let value_or_source_location = self.value_or_source_location.get();
-        let value_or_source_location = if size == 0xFFFF_FFFF { ValueOrLocation::Value(value_or_source_location) } else { ValueOrLocation::Location(value_or_source_location) };
+        let source = self.source.get();
+        let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
         let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
         fmt.debug_struct("PspDirectoryEntry")
            .field("type_", &type_)
            .field("sub_program", &self.sub_program)
            .field("size", &size)
-           .field("value_or_source_location", &value_or_source_location)
+           .field("source", &source)
            .finish()
     }
 }
@@ -432,7 +432,7 @@ pub struct BiosDirectoryEntryAttrs {
 pub struct BiosDirectoryEntry {
     pub attrs: LU32,
     size: LU32, // 0xFFFF_FFFF for value entry
-    value_or_source_location: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+    source: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
 }
 
@@ -441,7 +441,7 @@ impl Default for BiosDirectoryEntry {
         Self {
             attrs: 0.into(),
             size: 0.into(),
-            value_or_source_location: 0.into(),
+            source: 0.into(),
             destination_location: 0xffff_ffff_ffff_ffff.into(),
         }
     }
@@ -450,8 +450,8 @@ impl Default for BiosDirectoryEntry {
 impl core::fmt::Debug for BiosDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let size = self.size.get();
-        let value_or_source_location = self.value_or_source_location.get();
-        let value_or_source_location = if size == 0xFFFF_FFFF { ValueOrLocation::Value(value_or_source_location) } else { ValueOrLocation::Location(value_or_source_location) };
+        let source = self.source.get();
+        let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
         let destination_location = self.destination_location.get();
         let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
         let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
@@ -459,7 +459,7 @@ impl core::fmt::Debug for BiosDirectoryEntry {
         fmt.debug_struct("BiosDirectoryEntry")
            .field("attrs", &attrs)
            .field("size", &size)
-           .field("value_or_source_location", &value_or_source_location)
+           .field("source", &source)
            .field("destination_location", &destination_location)
            .finish()
     }
