@@ -3,6 +3,7 @@ mod efs;
 mod ondisk;
 mod types;
 pub use types::Result;
+pub use types::Error;
 pub use crate::efs::Efs;
 pub use crate::efs::ProcessorGeneration;
 
