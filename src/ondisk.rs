@@ -5,6 +5,7 @@ use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use amd_flash::Location;
+use crate::types::ValueOrLocation;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
@@ -301,12 +302,6 @@ pub enum PspDirectoryEntryType {
     MpmSecurityDriver = 0x89,
 }
 
-#[derive(Debug)]
-pub enum ValueOrLocation {
-    Value(u64),
-    Location(u64),
-}
-
 #[bitfield(bits = 32)]
 #[repr(u32)]
 #[derive(Copy, Clone, Debug)]
@@ -336,13 +331,33 @@ impl Default for PspDirectoryEntry {
     }
 }
 
+impl PspDirectoryEntry {
+    pub fn type_(&self) -> PspDirectoryEntryType {
+        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.type_()
+    }
+    pub fn source(&self) -> ValueOrLocation {
+        let size = self.size.get();
+        let source = self.source.get();
+        let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
+        source
+    }
+    pub fn size(&self) -> Option<u32> {
+        let size = self.size.get();
+        if size == 0xFFFF_FFFF {
+            None
+        } else {
+            Some(size)
+        }
+    }
+}
+
 impl core::fmt::Debug for PspDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
         let size = self.size.get();
-        let source = self.source.get();
-        let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
-        let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
+        let source = self.source();
+        let size = self.size();
         fmt.debug_struct("PspDirectoryEntry")
            .field("attrs", &attrs)
            .field("size", &size)
