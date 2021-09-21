@@ -2,7 +2,9 @@
 #[derive(Debug)]
 pub enum Error {
     IoError(amd_flash::Error),
-    HeaderNotFound,
+    EfsHeaderNotFound,
+    PspDirectoryHeaderNotFound,
+    BiosDirectoryHeaderNotFound,
     Marshal,
     Overlap,
     Duplicate,

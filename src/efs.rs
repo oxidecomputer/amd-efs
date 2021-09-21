@@ -274,14 +274,14 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 },
             }
         }
-        Err(Error::HeaderNotFound)
+        Err(Error::EfsHeaderNotFound)
     }
 
     pub fn psp_directory(&self, embedded_firmware_structure: &Efh) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
         let psp_directory_table_location = embedded_firmware_structure.psp_directory_table_location_zen.get();
         if psp_directory_table_location == 0xffff_ffff {
-            Err(Error::HeaderNotFound)
+            Err(Error::PspDirectoryHeaderNotFound)
         } else {
             let directory = match PspDirectory::load(&self.storage, psp_directory_table_location) {
                 Ok(directory) => {
@@ -307,7 +307,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 }
             };
             if psp_directory_table_location == 0xffff_ffff {
-                Err(Error::HeaderNotFound)
+                Err(Error::PspDirectoryHeaderNotFound)
             } else {
                 let directory = PspDirectory::load(&self.storage, psp_directory_table_location)?;
                 if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
@@ -341,7 +341,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                     return Err(Error::Overlap);
                 }
             },
-            Err(Error::HeaderNotFound) => {
+            Err(Error::PspDirectoryHeaderNotFound) => {
             },
             Err(e) => {
                 return Err(e);
@@ -380,7 +380,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
             return Err(Error::Misaligned);
         }
         match self.psp_directory(embedded_firmware_structure) {
-            Err(Error::HeaderNotFound) => {
+            Err(Error::PspDirectoryHeaderNotFound) => {
             },
             Err(e) => {
                 return Err(e);
