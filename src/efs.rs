@@ -1,10 +1,11 @@
 
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry, PspDirectoryEntryType};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
+use crate::types::ValueOrLocation;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 use core::mem::size_of;
@@ -317,6 +318,29 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 }
             }
         }
+    }
+
+    pub fn secondary_psp_directory(&self, embedded_firmware_structure: &Efh) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        let main_directory = self.psp_directory(embedded_firmware_structure)?;
+        for entry in main_directory.entries() {
+            if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
+                match entry.source() {
+                    ValueOrLocation::Location(psp_directory_table_location) => {
+                        if psp_directory_table_location >= 0x1_0000_0000 {
+                            return Err(Error::PspDirectoryEntryTypeMismatch)
+                        } else {
+                            let psp_directory_table_location = psp_directory_table_location as u32;
+                            let directory = PspDirectory::load(&self.storage, psp_directory_table_location)?;
+                            return Ok(directory);
+                        }
+                    },
+                    _ => {
+                        return Err(Error::PspDirectoryEntryTypeMismatch)
+                    }
+                }
+            }
+        }
+        Err(Error::PspDirectoryHeaderNotFound)
     }
 
     /// Returns an iterator over level 1 BIOS directories
