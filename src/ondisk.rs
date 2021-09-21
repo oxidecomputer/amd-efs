@@ -469,15 +469,38 @@ impl Default for BiosDirectoryEntry {
     }
 }
 
-impl core::fmt::Debug for BiosDirectoryEntry {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl BiosDirectoryEntry {
+    pub fn source(&self) -> ValueOrLocation {
         let size = self.size.get();
         let source = self.source.get();
         let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
+        source
+    }
+    pub fn size(&self) -> Option<u32> {
+        let size = self.size.get();
+        if size == 0xFFFF_FFFF {
+            None
+        } else {
+            Some(size)
+        }
+    }
+    pub fn destination_location(&self) -> Option<u64> {
         let destination_location = self.destination_location.get();
-        let destination_location = if destination_location == 0xffff_ffff_ffff_ffff { None } else { Some(destination_location) };
+        if destination_location == 0xffff_ffff_ffff_ffff {
+            None
+        } else {
+            Some(destination_location)
+        }
+    }
+}
+
+impl core::fmt::Debug for BiosDirectoryEntry {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let size = self.size.get();
+        let source = self.source();
+        let destination_location = self.destination_location();
         let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
-        let size = if size == 0xFFFF_FFFF { None } else { Some(size) };
+        let size = self.size();
         fmt.debug_struct("BiosDirectoryEntry")
            .field("attrs", &attrs)
            .field("size", &size)
