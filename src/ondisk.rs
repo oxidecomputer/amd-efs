@@ -336,6 +336,14 @@ impl PspDirectoryEntry {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
         attrs.type_()
     }
+    pub fn sub_program(&self) -> u8 {
+        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.sub_program()
+    }
+    pub fn rom_id(&self) -> u8 {
+        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.rom_id()
+    }
     pub fn source(&self) -> ValueOrLocation {
         let size = self.size.get();
         let source = self.source.get();
