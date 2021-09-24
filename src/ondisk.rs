@@ -478,6 +478,51 @@ impl Default for BiosDirectoryEntry {
 }
 
 impl BiosDirectoryEntry {
+    pub fn type_(&self) -> BiosDirectoryEntryType {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.type_()
+    }
+
+    pub fn region_type(&self) -> BiosDirectoryEntryRegionType {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.region_type()
+    }
+
+    pub fn reset_image(&self) -> bool {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.reset_image()
+    }
+
+    pub fn copy_image(&self) -> bool {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.copy_image()
+    }
+
+    pub fn read_only(&self) -> bool {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.read_only()
+    }
+
+    pub fn compressed(&self) -> bool {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.compressed()
+    }
+
+    pub fn instance(&self) -> u8 {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.instance()
+    }
+
+    pub fn sub_program(&self) -> u8 {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.sub_program()
+    }
+
+    pub fn rom_id(&self) -> u8 {
+        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.rom_id()
+    }
+
     pub fn source(&self) -> ValueOrLocation {
         let size = self.size.get();
         let source = self.source.get();
