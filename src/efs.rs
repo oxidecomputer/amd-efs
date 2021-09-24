@@ -407,18 +407,45 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         Ok(())
     }
 
+    fn write_efh(&mut self) -> Result<()> {
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        match header_from_collection_mut(&mut buf[..]) {
+            Some(item) => {
+                *item = self.efh;
+            }
+            None => {
+            },
+        }
+
+        self.storage.write_block(self.efh_beginning, &buf)?;
+        Ok(())
+    }
+
     // Note: BEGINNING, END are coordinates (in Byte).
     pub fn create_bios_directory(&mut self, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
         }
-        self.ensure_no_overlap(beginning, end)?;
-        let result = BiosDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
-        if self.efh.compatible_with_processor_generation(ProcessorGeneration::Milan) {
-            // FIXME: embedded_firmware_structure.bios_directory_table_milan.set(); ensure that the others are unset?
-        } else {
-            // FIXME: embedded_firmware_structure.bios_directory_tables[2].set() or embedded_firmware_structure.bios_directory_tables[1].set() or embedded_firmware_structure.bios_directory_tables[0].set()
+        match self.bios_directories() {
+            Ok(items) => {
+                for directory in items {
+                    // TODO: Ensure that we don't have too many similar ones
+                }
+            },
+            Err(e) => {
+                return Err(e);
+            },
         }
+        self.ensure_no_overlap(beginning, end)?;
+        if self.efh.compatible_with_processor_generation(ProcessorGeneration::Milan) {
+            self.efh.bios_directory_table_milan.set(beginning);
+            // FIXME: ensure that the others are unset?
+        } else {
+            self.efh.bios_directory_tables[2].set(beginning);
+            // FIXME: ensure that the others are unset?
+        }
+        self.write_efh()?;
+        let result = BiosDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
         Ok(result)
     }
 
@@ -439,8 +466,10 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
             }
         }
         self.ensure_no_overlap(beginning, end)?;
+        // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.  Then, also psp_directory_table_location_naples should be set, instead.
+        self.efh.psp_directory_table_location_zen.set(beginning);
+        self.write_efh();
         let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
-        // FIXME: self.efh.psp_directory_table_location_zen.set(); and self.storage.write_block(right location, efh)
         Ok(result)
     }
 }
