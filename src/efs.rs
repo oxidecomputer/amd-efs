@@ -296,10 +296,12 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
-                let efh: Efh = Efh::default();
+                let mut efh: Efh = Efh::default();
+                efh.second_gen_efs.set(Efh::second_gen_efs_for_processor_generation(processor_generation));
                 *item = efh;
             }
             None => {
+                return Err(Error::Marshal);
             },
         }
 

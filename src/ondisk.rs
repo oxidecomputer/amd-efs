@@ -104,7 +104,7 @@ pub struct Efh {
     pub psp_directory_table_location_naples: LU32, // usually unused
     pub psp_directory_table_location_zen: LU32,
     pub bios_directory_tables: [LU32; 3], // Naples (usually unused), Newer (usually unused), Rome
-    second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
+    pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
     pub bios_directory_table_milan: LU32, // or Combo
     _padding: LU32,
     pub promontory_firmware_location: LU32,
@@ -158,6 +158,12 @@ impl Efh {
         let generation: u8 = generation as u8;
         assert!(generation < 16);
         self.second_gen_efs.get() & (1 << generation) == 0
+    }
+
+    pub fn second_gen_efs_for_processor_generation(generation: ProcessorGeneration) -> u32 {
+        let generation: u8 = generation as u8;
+        assert!(generation < 16);
+        0xffff_fffe &! (1 << generation)
     }
 }
 
