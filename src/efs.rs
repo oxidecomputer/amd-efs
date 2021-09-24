@@ -292,7 +292,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
             efh: *efh,
         })
     }
-    pub fn create(mut storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
+    pub fn create(mut storage: T, processor_generation: ProcessorGeneration) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
@@ -304,7 +304,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         }
 
         storage.write_block(0x20_000, &buf)?;
-        Self::load(storage, processor_generation)
+        Self::load(storage, Some(processor_generation))
     }
 
     pub fn psp_directory(&self) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
