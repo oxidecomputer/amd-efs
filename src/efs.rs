@@ -279,6 +279,9 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
         storage.read_block(efh_beginning, &mut xbuf)?;
         let efh = header_from_collection::<Efh>(&xbuf[..]).ok_or_else(|| Error::EfsHeaderNotFound)?;
+        if efh.signature.get() != 0x55aa_55aa {
+            return Err(Error::EfsHeaderNotFound);
+        }
 
         Ok(Self {
             storage,
