@@ -53,12 +53,12 @@ pub enum SpiReadMode {
 #[repr(u8)]
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
 pub enum SpiFastSpeedNew {
-    Speed66_66MHz = 0,
-    Speed33_33MHz = 1,
-    Speed22_22MHz = 2,
-    Speed16_66MHz = 3,
-    Speed100MHz = 0b100,
-    Speed800kHz = 0b101,
+    _66_66MHz = 0,
+    _33_33MHz = 1,
+    _22_22MHz = 2,
+    _16_66MHz = 3,
+    _100MHz = 0b100,
+    _800kHz = 0b101,
     DoNothing = 0xff,
 }
 
