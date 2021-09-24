@@ -188,10 +188,14 @@ impl DirectoryAdditionalInfo {
     pub fn try_into_unit(value: usize) -> Option<u16> {
         if value % Self::UNIT == 0 {
             let value = value / Self::UNIT;
-            Some(value.try_into().ok()?)
+            Some(value.try_into().unwrap())
         } else {
             None
         }
+    }
+    pub fn try_from_unit(value: u16) -> Option<usize> {
+        let result: usize = value.try_into().ok()?;
+        result.checked_mul(Self::UNIT)
     }
 }
 

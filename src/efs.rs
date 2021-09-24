@@ -1,4 +1,3 @@
-
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
 use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode};
@@ -92,7 +91,9 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
         self.location
     }
     fn end(&self) -> Location {
-        self.location // FIXME
+        let additional_info = DirectoryAdditionalInfo::from(self.header.additional_info.get());
+        let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
+        self.location + size // FIXME: range check
     }
     pub fn entries(&self) -> PspDirectoryIter<T, RW_BLOCK_SIZE> {
         PspDirectoryIter::<T, RW_BLOCK_SIZE> {
@@ -186,7 +187,9 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
         self.location
     }
     fn end(&self) -> Location {
-        self.location // FIXME
+        let additional_info = DirectoryAdditionalInfo::from(self.header.additional_info.get());
+        let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
+        self.location + size // FIXME: range check
     }
     pub fn entries(&self) -> BiosDirectoryIter<T, RW_BLOCK_SIZE> {
         BiosDirectoryIter::<T, RW_BLOCK_SIZE> {
