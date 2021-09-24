@@ -1,7 +1,7 @@
 
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry, PspDirectoryEntryType};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -9,6 +9,7 @@ use crate::types::ValueOrLocation;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 use core::mem::size_of;
+use core::convert::TryInto;
 
 pub struct PspDirectoryIter<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
     storage: &'a T,
@@ -73,6 +74,12 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
             Some(item) => {
                 *item = PspDirectoryHeader::default();
                 item.cookie = cookie;
+                let additional_info = DirectoryAdditionalInfo::new()
+                  .with_max_size(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?)
+                  .with_spi_block_size(DirectoryAdditionalInfo::try_into_unit(ERASURE_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
+                  .with_base_address(0)
+                  .with_address_mode(AddressMode::EfsRelativeOffset);
+                item.additional_info.set(additional_info.into());
                 storage.write_block(beginning, &buf)?;
                 Self::load(storage, beginning)
             }
@@ -161,6 +168,12 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
             Some(item) => {
                 *item = BiosDirectoryHeader::default();
                 item.cookie = cookie;
+                let additional_info = DirectoryAdditionalInfo::new()
+                  .with_max_size(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?)
+                  .with_spi_block_size(DirectoryAdditionalInfo::try_into_unit(ERASURE_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
+                  .with_base_address(0)
+                  .with_address_mode(AddressMode::EfsRelativeOffset);
+                item.additional_info.set(additional_info.into());
                 storage.write_block(beginning, &buf)?;
                 Self::load(storage, beginning)
             }

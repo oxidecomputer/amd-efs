@@ -6,6 +6,7 @@ pub enum Error {
     PspDirectoryHeaderNotFound,
     PspDirectoryEntryTypeMismatch,
     BiosDirectoryHeaderNotFound,
+    DirectoryRangeCheck,
     Marshal,
     Overlap,
     Duplicate,

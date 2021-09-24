@@ -1,6 +1,7 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
 use byteorder::LittleEndian;
+use core::convert::TryInto;
 use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -179,6 +180,19 @@ pub struct DirectoryAdditionalInfo {
     pub address_mode: AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
     #[skip]
     __: bool,
+}
+
+impl DirectoryAdditionalInfo {
+    pub const UNIT: usize = 4096; // Byte
+    /// Given a value, tries to convert it into UNIT without loss.  If that's not possible, returns None
+    pub fn try_into_unit(value: usize) -> Option<u16> {
+        if value % Self::UNIT == 0 {
+            let value = value / Self::UNIT;
+            Some(value.try_into().ok()?)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
@@ -378,10 +392,10 @@ impl core::fmt::Debug for PspDirectoryEntry {
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct BiosDirectoryHeader {
-    pub cookie: [u8; 4], // b"$BHD" or b"$BL2"
-    pub checksum: LU32, // 32-bit CRC value of header below this field and including all entries
-    pub total_entries: LU32,
-    additional_info: LU32,
+    pub(crate) cookie: [u8; 4], // b"$BHD" or b"$BL2"
+    pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
+    pub(crate) total_entries: LU32,
+    pub(crate) additional_info: LU32,
 }
 
 impl Default for BiosDirectoryHeader {
