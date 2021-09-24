@@ -229,15 +229,64 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
 // TODO: Borrow storage.
 pub struct Efs<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: T,
+    efh_beginning: u32,
+    efh: Efh,
 }
 
 impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Efs<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    pub fn load(storage: T) -> Result<Self> {
+    // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again (I think it would be better to have the user just construct two different Efs instances in that case)
+    pub(crate) fn embedded_firmware_header_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<u32> {
+        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
+            let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+            storage.read_block(*position, &mut xbuf)?;
+            match header_from_collection::<Efh>(&xbuf[..]) {
+                Some(item) => {
+                    // Note: only one Efh with second_gen_efs()==true allowed in entire Flash!
+                    if item.signature.get() == 0x55AA55AA && item.second_gen_efs() && match processor_generation {
+                        Some(x) => item.compatible_with_processor_generation(x),
+                        None => true,
+                    } {
+                        return Ok(*position);
+                    }
+                },
+                None => {
+                },
+            }
+        }
+        // Old firmware header is better than no firmware header; TODO: Warn.
+        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
+            let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+            storage.read_block(*position, &mut xbuf)?;
+            match header_from_collection::<Efh>(&xbuf[..]) {
+                Some(item) => {
+                    if item.signature.get() == 0x55AA55AA && !item.second_gen_efs() && match processor_generation {
+                        //Some(x) => item.compatible_with_processor_generation(x),
+                        None => true,
+                        _ => false,
+                    } {
+                        return Ok(*position);
+                    }
+                },
+                None => {
+                },
+            }
+        }
+        Err(Error::EfsHeaderNotFound)
+    }
+
+    pub fn load(storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
+        let efh_beginning = Self::embedded_firmware_header_beginning(&storage, processor_generation)?;
+        let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
+        storage.read_block(efh_beginning, &mut xbuf)?;
+        let efh = header_from_collection::<Efh>(&xbuf[..]).ok_or_else(|| Error::EfsHeaderNotFound)?;
+
         Ok(Self {
             storage,
+            efh_beginning,
+            efh: *efh,
         })
     }
-    pub fn create(mut storage: T) -> Result<Self> {
+    pub fn create(mut storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
@@ -249,51 +298,12 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         }
 
         storage.write_block(0x20_000, &buf)?;
-        Self::load(storage)
-    }
-    // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again (I think it would be better to have the user just construct two different Efs instances in that case)
-    pub fn embedded_firmware_structure(&self, processor_generation: Option<ProcessorGeneration>) -> Result<Efh> {
-        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
-            let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-            self.storage.read_block(*position, &mut xbuf)?;
-            match header_from_collection::<Efh>(&xbuf[..]) {
-                Some(item) => {
-                    // Note: only one Efh with second_gen_efs()==true allowed in entire Flash!
-                    if item.signature.get() == 0x55AA55AA && item.second_gen_efs() && match processor_generation {
-                        Some(x) => item.compatible_with_processor_generation(x),
-                        None => true,
-                    } {
-                        return Ok(*item);
-                    }
-                },
-                None => {
-                },
-            }
-        }
-        // Old firmware header is better than no firmware header; TODO: Warn.
-        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
-            let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-            self.storage.read_block(*position, &mut xbuf)?;
-            match header_from_collection::<Efh>(&xbuf[..]) {
-                Some(item) => {
-                    if item.signature.get() == 0x55AA55AA && !item.second_gen_efs() && match processor_generation {
-                        //Some(x) => item.compatible_with_processor_generation(x),
-                        None => true,
-                        _ => false,
-                    } {
-                        return Ok(*item);
-                    }
-                },
-                None => {
-                },
-            }
-        }
-        Err(Error::EfsHeaderNotFound)
+        Self::load(storage, processor_generation)
     }
 
-    pub fn psp_directory(&self, embedded_firmware_structure: &Efh) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+    pub fn psp_directory(&self) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         let mut xbuf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-        let psp_directory_table_location = embedded_firmware_structure.psp_directory_table_location_zen.get();
+        let psp_directory_table_location = self.efh.psp_directory_table_location_zen.get();
         if psp_directory_table_location == 0xffff_ffff {
             Err(Error::PspDirectoryHeaderNotFound)
         } else {
@@ -313,7 +323,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
             // That's the same fallback AMD does on Naples:
 
             let psp_directory_table_location = {
-                let addr = embedded_firmware_structure.psp_directory_table_location_naples.get();
+                let addr = self.efh.psp_directory_table_location_naples.get();
                 if addr == 0xffff_ffff {
                     addr
                 } else {
@@ -333,8 +343,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         }
     }
 
-    pub fn secondary_psp_directory(&self, embedded_firmware_structure: &Efh) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
-        let main_directory = self.psp_directory(embedded_firmware_structure)?;
+    pub fn secondary_psp_directory(&self) -> Result<PspDirectory<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        let main_directory = self.psp_directory()?;
         for entry in main_directory.entries() {
             if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
                 match entry.source() {
@@ -357,7 +367,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     }
 
     /// Returns an iterator over level 1 BIOS directories
-    pub fn bios_directories(&self, embedded_firmware_structure: &Efh) -> Result<EfhBiosIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+    pub fn bios_directories(&self) -> Result<EfhBiosIterator<T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+        let embedded_firmware_structure = &self.efh;
         let positions = [embedded_firmware_structure.bios_directory_table_milan.get(), embedded_firmware_structure.bios_directory_tables[2].get() & 0x00ff_ffff, embedded_firmware_structure.bios_directory_tables[1].get() & 0x00ff_ffff, embedded_firmware_structure.bios_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
         Ok(EfhBiosIterator {
             storage: &self.storage,
@@ -367,9 +378,9 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     }
 
     // Make sure there's no overlap (even when rounded to entire erasure blocks)
-    fn ensure_no_overlap(&self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<()> {
+    fn ensure_no_overlap(&self, beginning: Location, end: Location) -> Result<()> {
         let (beginning, end) = T::grow_to_erasure_block(beginning, end);
-        match self.psp_directory(embedded_firmware_structure) {
+        match self.psp_directory() {
             Ok(psp_directory) => {
                 let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.beginning(), psp_directory.end());
                 let intersection_beginning = beginning.max(reference_beginning);
@@ -384,7 +395,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(e);
             },
         }
-        let bios_directories = self.bios_directories(embedded_firmware_structure)?;
+        let bios_directories = self.bios_directories()?;
         for bios_directory in bios_directories {
             let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.beginning(), bios_directory.end());
             let intersection_beginning = beginning.max(reference_beginning);
@@ -397,13 +408,13 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
-    pub fn create_bios_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+    pub fn create_bios_directory(&mut self, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
         }
-        self.ensure_no_overlap(embedded_firmware_structure, beginning, end)?;
+        self.ensure_no_overlap(beginning, end)?;
         let result = BiosDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
-        if embedded_firmware_structure.compatible_with_processor_generation(ProcessorGeneration::Milan) {
+        if self.efh.compatible_with_processor_generation(ProcessorGeneration::Milan) {
             // FIXME: embedded_firmware_structure.bios_directory_table_milan.set(); ensure that the others are unset?
         } else {
             // FIXME: embedded_firmware_structure.bios_directory_tables[2].set() or embedded_firmware_structure.bios_directory_tables[1].set() or embedded_firmware_structure.bios_directory_tables[0].set()
@@ -412,11 +423,11 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
-    pub fn create_psp_directory(&mut self, embedded_firmware_structure: &Efh, beginning: Location, end: Location) -> Result<PspDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
+    pub fn create_psp_directory(&mut self, beginning: Location, end: Location) -> Result<PspDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
         }
-        match self.psp_directory(embedded_firmware_structure) {
+        match self.psp_directory() {
             Err(Error::PspDirectoryHeaderNotFound) => {
             },
             Err(e) => {
@@ -427,9 +438,9 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                 return Err(Error::Duplicate);
             }
         }
-        self.ensure_no_overlap(embedded_firmware_structure, beginning, end)?;
+        self.ensure_no_overlap(beginning, end)?;
         let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
-        // FIXME: embedded_firmware_structure.psp_directory_table_location_zen.set(); and self.storage.write_block(right location, efh)
+        // FIXME: self.efh.psp_directory_table_location_zen.set(); and self.storage.write_block(right location, efh)
         Ok(result)
     }
 }
