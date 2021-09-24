@@ -474,7 +474,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         self.ensure_no_overlap(beginning, end)?;
         // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.  Then, also psp_directory_table_location_naples should be set, instead.
         self.efh.psp_directory_table_location_zen.set(beginning);
-        self.write_efh();
+        self.write_efh()?;
         let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
         Ok(result)
     }
