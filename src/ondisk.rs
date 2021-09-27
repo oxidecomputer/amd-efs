@@ -387,7 +387,6 @@ impl PspDirectoryEntry {
 impl core::fmt::Debug for PspDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        let size = self.size.get();
         let source = self.source();
         let size = self.size();
         fmt.debug_struct("PspDirectoryEntry")
@@ -573,7 +572,6 @@ impl BiosDirectoryEntry {
 
 impl core::fmt::Debug for BiosDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let size = self.size.get();
         let source = self.source();
         let destination_location = self.destination_location();
         let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
