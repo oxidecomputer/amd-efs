@@ -327,6 +327,46 @@ pub enum PspDirectoryEntryType {
     MpmSecurityDriver = 0x89,
 }
 
+/// For 32 MiB SPI Flash, which half ot map to MMIO 0xff00_0000.
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+pub enum PspSoftFuseChain32MiBSpiDecoding {
+    LowerHalf = 0,
+    UpperHalf = 1,
+}
+
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+pub enum PspSoftFuseChainPostCodeDecoding {
+    Lpc = 0,
+    Espi = 1,
+}
+
+#[bitfield(bits = 64)]
+#[repr(u64)]
+#[derive(Copy, Clone, Debug)]
+pub struct PspSoftFuseChain {
+    pub secure_debug_unlock: bool,
+    #[skip]
+    __: bool,
+    pub early_secure_debug_unlock: bool,
+    pub unlock_token_in_nvram: bool, // if the unlock token has been stored (by us) into NVRAM
+    pub force_security_policy_loading_even_if_insecure: bool,
+    pub load_diagnostic_bootloader: bool,
+    pub disable_psp_debug_prints: bool,
+    #[skip]
+    __: B7,
+    pub spi_decoding: PspSoftFuseChain32MiBSpiDecoding,
+    pub postcode_decoding: PspSoftFuseChainPostCodeDecoding,
+    #[skip]
+    __: B12,
+    #[skip]
+    __: bool,
+    pub skip_mp2_firmware_loading: bool,
+    pub postcode_output_control_1byte: bool, // ???
+    pub force_recovery_booting: bool,
+    #[skip]
+    __: B32,
+}
+
 #[bitfield(bits = 32)]
 #[repr(u32)]
 #[derive(Copy, Clone, Debug)]
