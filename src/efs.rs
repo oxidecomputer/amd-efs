@@ -9,6 +9,7 @@ use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 use core::mem::size_of;
 use core::convert::TryInto;
+use crate::amdfletcher32::AmdFletcher32;
 
 pub struct PspDirectoryIter<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
     storage: &'a T,
@@ -67,6 +68,14 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
                 Err(Error::Marshal)
             },
         }
+/*
+let mut fletcher = AmdFletcher32::new();
+fletcher.update([1,2,3]);
+fletcher.value().value()
+*/
+
+
+
     }
     fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];

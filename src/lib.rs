@@ -1,4 +1,5 @@
 
+mod amdfletcher32;
 mod efs;
 mod ondisk;
 mod types;

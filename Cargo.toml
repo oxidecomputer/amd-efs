@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 amd-flash = { path = "../amd-flash" }
 byteorder = "1.4.3"
+fletcher = "0.1.0"
 modular-bitfield = "0.11.2"
 
 #
