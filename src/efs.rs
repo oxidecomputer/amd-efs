@@ -368,7 +368,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
                     addr & 0x00ff_ffff
                 }
             };
-            if psp_directory_table_location == 0xffff_ffff {
+            if psp_directory_table_location == 0xffff_ffff || psp_directory_table_location == 0 {
                 Err(Error::PspDirectoryHeaderNotFound)
             } else {
                 let directory = PspDirectory::load(&self.storage, psp_directory_table_location)?;
