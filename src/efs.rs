@@ -1,6 +1,6 @@
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, BiosDirectoryEntry, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -47,6 +47,7 @@ pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SI
 }
 
 impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    const SPI_BLOCK_SIZE: usize = 0x3000;
     fn load(storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
         storage.read_block(location, &mut buf)?;
@@ -73,9 +74,15 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
             Some(item) => {
                 *item = PspDirectoryHeader::default();
                 item.cookie = cookie;
+                if RW_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
+                    return Err(Error::DirectoryRangeCheck);
+                }
+                if ERASURE_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
+                    return Err(Error::DirectoryRangeCheck);
+                }
                 let additional_info = DirectoryAdditionalInfo::new()
-                  .with_max_size(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?)
-                  .with_spi_block_size(DirectoryAdditionalInfo::try_into_unit(ERASURE_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
+                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
+                  .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_base_address(0)
                   .with_address_mode(AddressMode::EfsRelativeOffset);
                 item.additional_info.set(additional_info.into());
@@ -102,6 +109,21 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
             end: self.end(),
             header: self.header,
             index: 0u32,
+        }
+    }
+    /// Repeatedly calls ITERATIVE_CONTENTS, which fills BUF as much as possible.  Returns the number of u8 that are filled in BUF.
+    /// It is only allowed to return a number of u8 that are filled in BUF smaller than the possible size if the blob is ending.
+    pub fn add_blob_entry(&mut self, attrs: &PspDirectoryEntryAttrs, size: usize, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
+        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        loop {
+            let count = iterative_contents(&mut buf)?;
+            if count == 0 {
+                return Ok(());
+            }
+            // FIXME: actually add BUF to the directory.
+            if count < buf.len() {
+                return Ok(());
+            }
         }
     }
 }
@@ -143,6 +165,8 @@ pub struct BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_S
 }
 
 impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> BiosDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    const SPI_BLOCK_SIZE: usize = 0x1000;
+
     fn load(storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
         storage.read_block(location, &mut buf)?;
@@ -169,9 +193,15 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
             Some(item) => {
                 *item = BiosDirectoryHeader::default();
                 item.cookie = cookie;
+                if RW_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
+                    return Err(Error::DirectoryRangeCheck);
+                }
+                if ERASURE_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
+                    return Err(Error::DirectoryRangeCheck);
+                }
                 let additional_info = DirectoryAdditionalInfo::new()
-                  .with_max_size(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?)
-                  .with_spi_block_size(DirectoryAdditionalInfo::try_into_unit(ERASURE_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
+                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
+                  .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_base_address(0)
                   .with_address_mode(AddressMode::EfsRelativeOffset);
                 item.additional_info.set(additional_info.into());
