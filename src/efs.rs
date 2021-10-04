@@ -1,6 +1,6 @@
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, BiosDirectoryEntryAttrs, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -9,20 +9,24 @@ use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 use core::mem::size_of;
 use core::convert::TryInto;
+use core::marker::PhantomData;
 use crate::amdfletcher32::AmdFletcher32;
+use zerocopy::FromBytes;
+use zerocopy::AsBytes;
 
-pub struct PspDirectoryIter<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
+pub struct DirectoryIter<'a, Item, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
     storage: &'a T,
-    beginning: Location, // current PspDirectoryEntry
+    beginning: Location, // current item (entry)
     end: Location,
-    header: PspDirectoryHeader,
+    total_entries: u32,
     index: u32,
+    _item: PhantomData<Item>,
 }
 
-impl<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for PspDirectoryIter<'a, T, RW_BLOCK_SIZE> {
-    type Item = PspDirectoryEntry;
+impl<'a, Item: FromBytes + Copy, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for DirectoryIter<'a, Item, T, RW_BLOCK_SIZE> {
+    type Item = Item;
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        if self.index < self.header.total_entries.get() {
+        if self.index < self.total_entries {
             // This is very inefficient reading!
             let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
             // FIXME: range check so we don't fall off the end!
@@ -30,9 +34,9 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for P
             self.storage.read_block(self.beginning - (self.beginning % rw_block_size), &mut buf).ok()?;
             let beginning = self.beginning as usize;
             let end = self.end as usize;
-            let buf = &buf[(beginning % RW_BLOCK_SIZE) .. (beginning % RW_BLOCK_SIZE) + size_of::<PspDirectoryEntry>()];
-            let result = header_from_collection::<PspDirectoryEntry>(buf)?; // TODO: Check for errors
-            self.beginning += size_of::<PspDirectoryEntry>() as u32; // FIXME: range check
+            let buf = &buf[(beginning % RW_BLOCK_SIZE) .. (beginning % RW_BLOCK_SIZE) + size_of::<Item>()];
+            let result = header_from_collection::<Item>(buf)?; // TODO: Check for errors
+            self.beginning += size_of::<Item>() as u32; // FIXME: range check
             self.index += 1;
             Some(*result)
         } else {
@@ -41,27 +45,43 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for P
     }
 }
 
-pub struct PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
+// TODO: split into Directory and DirectoryContents (disjunct) if requested in additional_info.
+pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, Attrs: Sized, const _SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
     location: Location,
-    pub header: PspDirectoryHeader,
+    pub header: MainHeader, // FIXME: make read-only
+    directory_headers_size: u32,
+    _attrs: PhantomData<Attrs>,
+    _item: PhantomData<Item>,
 }
 
-impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> PspDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    const SPI_BLOCK_SIZE: usize = 0x3000;
+impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: FromBytes + AsBytes, T: 'a + FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
+    const MAX_DIRECTORY_HEADERS_SIZE: usize = 0x400;
+    const MAX_DIRECTORY_ENTRIES: usize = (Self::MAX_DIRECTORY_HEADERS_SIZE - size_of::<MainHeader>()) / size_of::<Item>();
+    /// Note: Caller has to check whether it is the right cookie!
     fn load(storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
         storage.read_block(location, &mut buf)?;
-        match header_from_collection::<PspDirectoryHeader>(&buf[..]) {
+        match header_from_collection::<MainHeader>(&buf[..]) {
             Some(header) => {
-                if header.cookie == *b"$PSP" || header.cookie == *b"$PL2" {
-                     Ok(Self {
-                         storage,
-                         location,
-                         header: *header,
-                     })
+                let cookie = header.cookie();
+                if cookie == *b"$PSP" || cookie == *b"$PL2" || cookie == *b"$BHD" || cookie == *b"$BL2" {
+                    let contents_base = DirectoryAdditionalInfo::try_from_unit(header.additional_info().base_address()).unwrap();
+                    Ok(Self {
+                        storage,
+                        location,
+                        header: *header,
+                        directory_headers_size: if contents_base == 0 {
+                            size_of::<MainHeader>() as u32 + size_of::<Item>() as u32 * header.total_entries() // FIXME: Range check
+                        } else {
+                            Self::MAX_DIRECTORY_HEADERS_SIZE.try_into().unwrap()
+                        },
+                        _attrs: PhantomData,
+                        _item: PhantomData,
+                    })
                 } else {
-                     Err(Error::Marshal)
+                    Err(Error::Marshal)
                 }
             },
             None => {
@@ -73,16 +93,13 @@ let mut fletcher = AmdFletcher32::new();
 fletcher.update([1,2,3]);
 fletcher.value().value()
 */
-
-
-
     }
     fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
-        match header_from_collection_mut::<PspDirectoryHeader>(&mut buf[..]) {
+        match header_from_collection_mut::<MainHeader>(&mut buf[..]) {
             Some(item) => {
-                *item = PspDirectoryHeader::default();
-                item.cookie = cookie;
+                *item = MainHeader::default();
+                // FIXME: item.cookie = cookie;
                 // FIXME: Erase
                 // Note: It is valid that ERASURE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
                 if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
@@ -94,7 +111,7 @@ fletcher.value().value()
                   .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_base_address(0)
                   .with_address_mode(AddressMode::EfsRelativeOffset);
-                item.additional_info.set(additional_info.into());
+                item.set_additional_info(additional_info);
                 storage.write_block(beginning, &buf)?;
                 Self::load(storage, beginning)
             }
@@ -103,33 +120,55 @@ fletcher.value().value()
             },
         }
     }
-    fn beginning(&self) -> Location {
-        self.location
+    fn directory_beginning(&self) -> Location {
+        let additional_info = self.header.additional_info();
+        let contents_base = DirectoryAdditionalInfo::try_from_unit(additional_info.base_address()).unwrap();
+        if contents_base == 0 { // skip Main Header
+            self.location + size_of::<MainHeader>() as Location // FIXME: range check
+        } else { // The main header is somewhere completely different
+            self.location
+        }
     }
-    fn end(&self) -> Location {
-        let additional_info = DirectoryAdditionalInfo::from(self.header.additional_info.get());
+    fn directory_end(&self) -> Location {
+        let headers_size: Location = self.directory_headers_size.try_into().unwrap();
+        self.location + headers_size // FIXME: range check; TODO: maybe sometimes, provide much less (see contents_beginning)
+    }
+    fn contents_beginning(&self) -> Location {
+        let additional_info = self.header.additional_info();
+        let contents_base = DirectoryAdditionalInfo::try_from_unit(additional_info.base_address()).unwrap();
+        if contents_base == 0 {
+            self.directory_end()
+        } else {
+            contents_base.try_into().unwrap()
+        }
+    }
+    fn contents_end(&self) -> Location {
+        let additional_info = self.header.additional_info();
         let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
-        self.location + size // FIXME: range check
+        self.contents_beginning() + size // FIXME: range check
     }
-    pub fn entries(&self) -> PspDirectoryIter<T, RW_BLOCK_SIZE> {
-        PspDirectoryIter::<T, RW_BLOCK_SIZE> {
+    pub fn entries(&self) -> DirectoryIter<Item, T, RW_BLOCK_SIZE> {
+        let additional_info = self.header.additional_info();
+
+        DirectoryIter::<Item, T, RW_BLOCK_SIZE> {
             storage: self.storage,
-            beginning: self.beginning() + size_of::<PspDirectoryHeader>() as u32, // FIXME: range check
-            end: self.end(),
-            header: self.header,
+            beginning: self.directory_beginning(),
+            end: self.directory_end(), // actually, much earlier--when total_entries is over.
+            total_entries: self.header.total_entries(),
             index: 0u32,
+            _item: PhantomData,
         }
     }
 
-    pub(crate) fn add_entry(&mut self, attrs: &PspDirectoryEntryAttrs, size: usize) -> Result<()> {
-        // FIXME: Actually increase header.total_entries (if there's still space; how much space is there for the total headers anyway?)
-        let entry_size = size_of::<PspDirectoryEntry>();
+    pub(crate) fn add_entry(&mut self, attrs: &Attrs, size: usize) -> Result<()> {
+        // FIXME: Actually increase header.total_entries (if there's still space)
+        let entry_size = size_of::<Item>();
         todo!();
     }
 
     /// Repeatedly calls ITERATIVE_CONTENTS, which fills BUF as much as possible.  Returns the number of u8 that are filled in BUF.
     /// It is only allowed to return a number of u8 that are filled in BUF smaller than the possible size if the blob is ending.
-    pub fn add_blob_entry(&mut self, attrs: &PspDirectoryEntryAttrs, size: usize, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
+    pub fn add_blob_entry(&mut self, attrs: &Attrs, size: usize, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
         let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         loop {
             let count = iterative_contents(&mut buf)?;
@@ -145,107 +184,8 @@ fletcher.value().value()
     }
 }
 
-pub struct BiosDirectoryIter<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> {
-    storage: &'a T,
-    beginning: Location, // current BiosDirectoryEntry
-    end: Location,
-    header: BiosDirectoryHeader,
-    index: u32,
-}
-
-impl<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize> Iterator for BiosDirectoryIter<'a, T, RW_BLOCK_SIZE> {
-    type Item = BiosDirectoryEntry;
-    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        if self.index < self.header.total_entries.get() {
-            // This is very inefficient reading!
-            let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-            // FIXME: range check so we don't fall off the end!
-            let rw_block_size = RW_BLOCK_SIZE as u32;
-            self.storage.read_block(self.beginning - (self.beginning % rw_block_size), &mut buf).ok()?;
-            let beginning = self.beginning as usize;
-            let end = self.end as usize;
-            let buf = &buf[(beginning % RW_BLOCK_SIZE) .. (beginning % RW_BLOCK_SIZE) + size_of::<BiosDirectoryEntry>()];
-            let result = header_from_collection::<BiosDirectoryEntry>(buf)?; // TODO: Check for errors
-            self.beginning += size_of::<BiosDirectoryEntry>() as u32; // FIXME: range check
-            self.index += 1;
-            Some(*result)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
-    storage: &'a T,
-    location: Location,
-    pub header: BiosDirectoryHeader,
-}
-
-impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> BiosDirectory<'a, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    const SPI_BLOCK_SIZE: usize = 0x1000;
-
-    fn load(storage: &'a T, location: Location) -> Result<Self> {
-        let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
-        storage.read_block(location, &mut buf)?;
-        match header_from_collection::<BiosDirectoryHeader>(&buf[..]) {
-            Some(header) => {
-                if header.cookie == *b"$BHD" || header.cookie == *b"$BL2" {
-                     Ok(Self {
-                         storage,
-                         location,
-                         header: *header,
-                     })
-                } else {
-                     Err(Error::Marshal)
-                }
-            },
-            None => {
-                Err(Error::Marshal)
-            },
-        }
-    }
-    fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
-        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
-        match header_from_collection_mut::<BiosDirectoryHeader>(&mut buf[..]) {
-            Some(item) => {
-                *item = BiosDirectoryHeader::default();
-                item.cookie = cookie;
-                // Note: It is valid that ERASURE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
-                if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
-                    return Err(Error::DirectoryRangeCheck);
-                }
-                let additional_info = DirectoryAdditionalInfo::new()
-                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
-                  .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
-                  .with_base_address(0)
-                  .with_address_mode(AddressMode::EfsRelativeOffset);
-                item.additional_info.set(additional_info.into());
-                storage.write_block(beginning, &buf)?;
-                Self::load(storage, beginning)
-            }
-            None => {
-                Err(Error::Marshal)
-            },
-        }
-    }
-    fn beginning(&self) -> Location {
-        self.location
-    }
-    fn end(&self) -> Location {
-        let additional_info = DirectoryAdditionalInfo::from(self.header.additional_info.get());
-        let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
-        self.location + size // FIXME: range check
-    }
-    pub fn entries(&self) -> BiosDirectoryIter<T, RW_BLOCK_SIZE> {
-        BiosDirectoryIter::<T, RW_BLOCK_SIZE> {
-            storage: self.storage,
-            beginning: self.beginning() + size_of::<BiosDirectoryHeader>() as u32, // FIXME: range check
-            end: self.end(),
-            header: self.header,
-            index: 0u32,
-        }
-    }
-}
+pub type PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, 0x3000, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
+pub type BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, 0x1000, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
 
 pub struct EfhBiosIterator<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
@@ -435,7 +375,13 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         let (beginning, end) = T::grow_to_erasure_block(beginning, end);
         match self.psp_directory() {
             Ok(psp_directory) => {
-                let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.beginning(), psp_directory.end());
+                let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.directory_beginning(), psp_directory.directory_end());
+                let intersection_beginning = beginning.max(reference_beginning);
+                let intersection_end = end.min(reference_end);
+                if intersection_beginning < intersection_end {
+                    return Err(Error::Overlap);
+                }
+                let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.contents_beginning(), psp_directory.contents_end());
                 let intersection_beginning = beginning.max(reference_beginning);
                 let intersection_end = end.min(reference_end);
                 if intersection_beginning < intersection_end {
@@ -450,7 +396,13 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         }
         let bios_directories = self.bios_directories()?;
         for bios_directory in bios_directories {
-            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.beginning(), bios_directory.end());
+            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.directory_beginning(), bios_directory.directory_end());
+            let intersection_beginning = beginning.max(reference_beginning);
+            let intersection_end = end.min(reference_end);
+            if intersection_beginning < intersection_end {
+                return Err(Error::Overlap);
+            }
+            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.contents_beginning(), bios_directory.contents_end());
             let intersection_beginning = beginning.max(reference_beginning);
             let intersection_end = end.min(reference_end);
             if intersection_beginning < intersection_end {
@@ -474,7 +426,8 @@ impl<T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>
         Ok(())
     }
 
-    // Note: BEGINNING, END are coordinates (in Byte).
+    /// Note: BEGINNING, END are coordinates (in Byte).
+    /// Note: We always create the directory and the contents adjacent without gap.
     pub fn create_bios_directory(&mut self, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>> {
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
