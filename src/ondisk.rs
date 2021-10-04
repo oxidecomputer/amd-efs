@@ -182,7 +182,7 @@ pub enum AddressMode {
 pub struct DirectoryAdditionalInfo {
     pub max_size: B10, // directory size in 4 KiB; Note: doc error in AMD docs
     pub spi_block_size: B4, // spi block size in 4 KiB
-    pub base_address: B15, // base address in 4 KiB
+    pub base_address: B15, // base address in 4 KiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
     #[bits = 2]
     pub address_mode: AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
     #[skip]
@@ -206,6 +206,13 @@ impl DirectoryAdditionalInfo {
     }
 }
 
+pub trait DirectoryHeader {
+    fn cookie(&self) -> [u8; 4];
+    fn additional_info(&self) -> DirectoryAdditionalInfo;
+    fn set_additional_info(&mut self, value: DirectoryAdditionalInfo);
+    fn total_entries(&self) -> u32;
+}
+
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
 pub struct PspDirectoryHeader {
@@ -213,6 +220,21 @@ pub struct PspDirectoryHeader {
     pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     pub(crate) total_entries: LU32,
     pub(crate) additional_info: LU32, // 0xffff_ffff; or DirectoryAdditionalInfo
+}
+
+impl DirectoryHeader for PspDirectoryHeader {
+    fn cookie(&self) -> [u8; 4] {
+        self.cookie
+    }
+    fn additional_info(&self) -> DirectoryAdditionalInfo {
+        DirectoryAdditionalInfo::from(self.additional_info.get())
+    }
+    fn set_additional_info(&mut self, value: DirectoryAdditionalInfo) {
+        self.additional_info.set(value.into())
+    }
+    fn total_entries(&self) -> u32 {
+        self.total_entries.get()
+    }
 }
 
 impl Default for PspDirectoryHeader {
@@ -446,6 +468,21 @@ pub struct BiosDirectoryHeader {
     pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     pub(crate) total_entries: LU32,
     pub(crate) additional_info: LU32,
+}
+
+impl DirectoryHeader for BiosDirectoryHeader {
+    fn cookie(&self) -> [u8; 4] {
+        self.cookie
+    }
+    fn additional_info(&self) -> DirectoryAdditionalInfo {
+        DirectoryAdditionalInfo::from(self.additional_info.get())
+    }
+    fn set_additional_info(&mut self, value: DirectoryAdditionalInfo) {
+        self.additional_info.set(value.into())
+    }
+    fn total_entries(&self) -> u32 {
+        self.total_entries.get()
+    }
 }
 
 impl Default for BiosDirectoryHeader {
