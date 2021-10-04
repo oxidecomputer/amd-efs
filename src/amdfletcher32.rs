@@ -13,27 +13,37 @@ impl Wu32 {
 
 impl Add for Wu32 {
     type Output = Self;
-    fn add(self, other: Self) -> <Self as Add<Self>>::Output { todo!() }
+    fn add(self, other: Self) -> <Self as Add<Self>>::Output {
+        Self(self.0.add(other.0))
+    }
 }
 
 impl BitAnd for Wu32 {
     type Output = Self;
-    fn bitand(self, other: Self) -> Self::Output { todo!() }
+    fn bitand(self, other: Self) -> Self::Output {
+        Self(self.0.bitand(other.0))
+    }
 }
 
 impl BitOr for Wu32 {
     type Output = Self;
-    fn bitor(self, other: Self) -> Self::Output { todo!() }
+    fn bitor(self, other: Self) -> Self::Output {
+        Self(self.0.bitor(other.0))
+    }
 }
 
 impl Shr for Wu32 {
     type Output = Self;
-    fn shr(self, other: Self) -> Self::Output { todo!() }
+    fn shr(self, other: Self) -> Self::Output {
+        Self(self.0.shr(other.0))
+    }
 }
 
 impl Shl for Wu32 {
     type Output = Self;
-    fn shl(self, other: Self) -> Self::Output { todo!() }
+    fn shl(self, other: Self) -> Self::Output {
+        Self(self.0.shl(other.0))
+    }
 }
 
 impl From<u16> for Wu32 {
