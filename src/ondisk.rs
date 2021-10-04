@@ -22,7 +22,7 @@ pub fn header_from_collection_mut<'a, T: Sized + FromBytes + AsBytes>(buf: &'a m
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
-pub fn header_from_collection<'a, T: Sized + FromBytes + AsBytes>(buf: &'a [u8]) -> Option<&'a T> {
+pub fn header_from_collection<'a, T: Sized + FromBytes>(buf: &'a [u8]) -> Option<&'a T> {
     match LayoutVerified::<_, T>::new_from_prefix(buf) {
         Some((item, _xbuf)) => {
             Some(item.into_ref())
