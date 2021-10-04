@@ -83,12 +83,12 @@ fletcher.value().value()
             Some(item) => {
                 *item = PspDirectoryHeader::default();
                 item.cookie = cookie;
-                if RW_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
+                // FIXME: Erase
+                // Note: It is valid that ERASURE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
+                if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
                     return Err(Error::DirectoryRangeCheck);
                 }
-                if ERASURE_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
-                    return Err(Error::DirectoryRangeCheck);
-                }
+
                 let additional_info = DirectoryAdditionalInfo::new()
                   .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
@@ -120,20 +120,28 @@ fletcher.value().value()
             index: 0u32,
         }
     }
+
+    pub(crate) fn add_entry(&mut self, attrs: &PspDirectoryEntryAttrs, size: usize) -> Result<()> {
+        // FIXME: Actually increase header.total_entries (if there's still space; how much space is there for the total headers anyway?)
+        let entry_size = size_of::<PspDirectoryEntry>();
+        todo!();
+    }
+
     /// Repeatedly calls ITERATIVE_CONTENTS, which fills BUF as much as possible.  Returns the number of u8 that are filled in BUF.
     /// It is only allowed to return a number of u8 that are filled in BUF smaller than the possible size if the blob is ending.
     pub fn add_blob_entry(&mut self, attrs: &PspDirectoryEntryAttrs, size: usize, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
-        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         loop {
             let count = iterative_contents(&mut buf)?;
             if count == 0 {
-                return Ok(());
+                break;
             }
             // FIXME: actually add BUF to the directory.
             if count < buf.len() {
-                return Ok(());
+                break;
             }
         }
+        self.add_entry(attrs, size)
     }
 }
 
@@ -202,10 +210,8 @@ impl<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_S
             Some(item) => {
                 *item = BiosDirectoryHeader::default();
                 item.cookie = cookie;
-                if RW_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
-                    return Err(Error::DirectoryRangeCheck);
-                }
-                if ERASURE_BLOCK_SIZE % Self::SPI_BLOCK_SIZE != 0 {
+                // Note: It is valid that ERASURE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
+                if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
                     return Err(Error::DirectoryRangeCheck);
                 }
                 let additional_info = DirectoryAdditionalInfo::new()
