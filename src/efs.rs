@@ -1,6 +1,6 @@
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, BiosDirectoryEntryAttrs, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, BiosDirectoryEntryAttrs, BiosDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -128,9 +128,10 @@ fletcher.value().value()
             self.location
         }
     }
+    /// This will return whatever space is allocated--whether it's in use or not!
     fn directory_end(&self) -> Location {
         let headers_size: Location = self.directory_headers_size.try_into().unwrap();
-        self.location + headers_size // FIXME: range check; TODO: maybe sometimes, provide much less (see contents_beginning)
+        self.location + headers_size // FIXME: range check
     }
     fn contents_beginning(&self) -> Location {
         let additional_info = self.header.additional_info();
@@ -164,6 +165,7 @@ fletcher.value().value()
     pub(crate) fn add_entry(&mut self, attrs: &Attrs, size: usize) -> Result<()> {
         // FIXME: Actually increase header.total_entries (if there's still space)
         let entry_size = size_of::<Item>();
+        let directory_end = self.directory_end();
         todo!();
     }
 
@@ -183,10 +185,27 @@ fletcher.value().value()
         }
         self.add_entry(attrs, size)
     }
+
+    // FIXME: Make private
+    pub fn add_value_entry(&mut self, attrs: &Attrs, value: u64) -> Result<()> {
+        // FIXME
+        todo!();
+    }
 }
 
 pub type PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, 0x3000, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
 pub type BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, 0x1000, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
+
+impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    pub fn add_entry_with_destination(&mut self, attrs: &BiosDirectoryEntryAttrs, size: usize, destination: u64) -> Result<()> {
+        todo!();
+    }
+
+    pub fn add_apob_entry(&mut self, type_: BiosDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
+        let attrs = BiosDirectoryEntryAttrs::new().with_type_(type_);
+        self.add_entry_with_destination(&attrs, 0, ram_destination_address)
+    }
+}
 
 pub struct EfhBiosIterator<'a, T: FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
