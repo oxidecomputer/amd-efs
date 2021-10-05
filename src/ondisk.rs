@@ -208,6 +208,7 @@ impl DirectoryAdditionalInfo {
 
 pub trait DirectoryHeader {
     fn cookie(&self) -> [u8; 4];
+    fn set_cookie(&mut self, value: [u8; 4]);
     fn additional_info(&self) -> DirectoryAdditionalInfo;
     fn set_additional_info(&mut self, value: DirectoryAdditionalInfo);
     fn total_entries(&self) -> u32;
@@ -225,6 +226,9 @@ pub struct PspDirectoryHeader {
 impl DirectoryHeader for PspDirectoryHeader {
     fn cookie(&self) -> [u8; 4] {
         self.cookie
+    }
+    fn set_cookie(&mut self, value: [u8; 4]) {
+        self.cookie = value;
     }
     fn additional_info(&self) -> DirectoryAdditionalInfo {
         DirectoryAdditionalInfo::from(self.additional_info.get())
@@ -473,6 +477,9 @@ pub struct BiosDirectoryHeader {
 impl DirectoryHeader for BiosDirectoryHeader {
     fn cookie(&self) -> [u8; 4] {
         self.cookie
+    }
+    fn set_cookie(&mut self, value: [u8; 4]) {
+        self.cookie = value;
     }
     fn additional_info(&self) -> DirectoryAdditionalInfo {
         DirectoryAdditionalInfo::from(self.additional_info.get())
