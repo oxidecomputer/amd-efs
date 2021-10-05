@@ -105,7 +105,6 @@ fletcher.value().value()
                 if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
                     return Err(Error::DirectoryRangeCheck);
                 }
-
                 let additional_info = DirectoryAdditionalInfo::new()
                   .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
@@ -145,7 +144,9 @@ fletcher.value().value()
     fn contents_end(&self) -> Location {
         let additional_info = self.header.additional_info();
         let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
-        self.contents_beginning() + size // FIXME: range check
+        // Assumption: SIZE includes the size of the main directory header.
+        // FIXME: What happens in the case contents_base != 0 ?  I think then it doesn't include it.
+        self.contents_beginning() + size - size_of::<MainHeader>() as u32 // FIXME: range check
     }
     pub fn entries(&self) -> DirectoryIter<Item, T, RW_BLOCK_SIZE> {
         let additional_info = self.header.additional_info();
