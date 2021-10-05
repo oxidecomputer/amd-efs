@@ -99,7 +99,7 @@ fletcher.value().value()
         match header_from_collection_mut::<MainHeader>(&mut buf[..]) {
             Some(item) => {
                 *item = MainHeader::default();
-                // FIXME: item.cookie = cookie;
+                item.set_cookie(cookie);
                 // FIXME: Erase
                 // Note: It is valid that ERASURE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
                 if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
