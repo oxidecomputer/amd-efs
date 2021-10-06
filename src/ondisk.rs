@@ -247,6 +247,7 @@ pub trait DirectoryHeader {
     fn additional_info(&self) -> DirectoryAdditionalInfo;
     fn set_additional_info(&mut self, value: DirectoryAdditionalInfo);
     fn total_entries(&self) -> u32;
+    fn set_total_entries(&mut self, value: u32);
     fn checksum(&self) -> u32;
     fn set_checksum(&mut self, value: u32);
 }
@@ -275,6 +276,9 @@ impl DirectoryHeader for PspDirectoryHeader {
     }
     fn total_entries(&self) -> u32 {
         self.total_entries.get()
+    }
+    fn set_total_entries(&mut self, value: u32) {
+        self.total_entries.set(value)
     }
     fn checksum(&self) -> u32 {
         self.checksum.get()
@@ -465,6 +469,11 @@ impl Default for PspDirectoryEntry {
     }
 }
 
+pub trait DirectoryEntry {
+    fn source(&self) -> ValueOrLocation;
+    fn size(&self) -> Option<u32>;
+}
+
 impl PspDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     pub fn type_(&self) -> PspDirectoryEntryType {
@@ -478,24 +487,6 @@ impl PspDirectoryEntry {
     pub fn rom_id(&self) -> u8 {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
         attrs.rom_id()
-    }
-    pub fn source(&self) -> ValueOrLocation {
-        let size = self.size.get();
-        let source = self.source.get();
-        let source = if size == Self::SIZE_VALUE_MARKER {
-            ValueOrLocation::Value(source)
-        } else {
-            ValueOrLocation::Location(source)
-        };
-        source
-    }
-    pub fn size(&self) -> Option<u32> {
-        let size = self.size.get();
-        if size == Self::SIZE_VALUE_MARKER {
-            None
-        } else {
-            Some(size)
-        }
     }
     pub fn new_value(attrs: &PspDirectoryEntryAttrs, value: u64) -> Self {
         Self {
@@ -513,6 +504,26 @@ impl PspDirectoryEntry {
                 size: size.into(),
                 source: u64::from(source).into(),
             })
+        }
+    }
+}
+impl DirectoryEntry for PspDirectoryEntry {
+    fn source(&self) -> ValueOrLocation {
+        let size = self.size.get();
+        let source = self.source.get();
+        let source = if size == Self::SIZE_VALUE_MARKER {
+            ValueOrLocation::Value(source)
+        } else {
+            ValueOrLocation::Location(source)
+        };
+        source
+    }
+    fn size(&self) -> Option<u32> {
+        let size = self.size.get();
+        if size == Self::SIZE_VALUE_MARKER {
+            None
+        } else {
+            Some(size)
         }
     }
 }
@@ -555,6 +566,9 @@ impl DirectoryHeader for BiosDirectoryHeader {
     }
     fn total_entries(&self) -> u32 {
         self.total_entries.get()
+    }
+    fn set_total_entries(&mut self, value: u32) {
+        self.total_entries.set(value)
     }
     fn checksum(&self) -> u32 {
         self.checksum.get()
@@ -705,24 +719,6 @@ impl BiosDirectoryEntry {
         attrs.rom_id()
     }
 
-    pub fn source(&self) -> ValueOrLocation {
-        let size = self.size.get();
-        let source = self.source.get();
-        let source = if size == Self::SIZE_VALUE_MARKER {
-            ValueOrLocation::Value(source)
-        } else {
-            ValueOrLocation::Location(source)
-        };
-        source
-    }
-    pub fn size(&self) -> Option<u32> {
-        let size = self.size.get();
-        if size == Self::SIZE_VALUE_MARKER {
-            None
-        } else {
-            Some(size)
-        }
-    }
     pub fn destination_location(&self) -> Option<u64> {
         let destination_location = self.destination_location.get();
         if destination_location == Self::DESTINATION_NONE_MARKER {
@@ -757,6 +753,28 @@ impl BiosDirectoryEntry {
                     },
                 }.into(),
             })
+        }
+    }
+}
+
+impl DirectoryEntry for BiosDirectoryEntry {
+    fn source(&self) -> ValueOrLocation {
+        let size = self.size.get();
+        let source = self.source.get();
+        let source = if size == Self::SIZE_VALUE_MARKER {
+            ValueOrLocation::Value(source)
+        } else {
+            ValueOrLocation::Location(source)
+        };
+        source
+    }
+
+    fn size(&self) -> Option<u32> {
+        let size = self.size.get();
+        if size == Self::SIZE_VALUE_MARKER {
+            None
+        } else {
+            Some(size)
         }
     }
 }
