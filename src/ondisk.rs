@@ -7,6 +7,8 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use amd_flash::Location;
 use crate::types::ValueOrLocation;
+use crate::types::Error;
+use crate::types::Result;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
@@ -457,6 +459,7 @@ impl Default for PspDirectoryEntry {
 }
 
 impl PspDirectoryEntry {
+    const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     pub fn type_(&self) -> PspDirectoryEntryType {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
         attrs.type_()
@@ -472,15 +475,37 @@ impl PspDirectoryEntry {
     pub fn source(&self) -> ValueOrLocation {
         let size = self.size.get();
         let source = self.source.get();
-        let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
+        let source = if size == Self::SIZE_VALUE_MARKER {
+            ValueOrLocation::Value(source)
+        } else {
+            ValueOrLocation::Location(source)
+        };
         source
     }
     pub fn size(&self) -> Option<u32> {
         let size = self.size.get();
-        if size == 0xFFFF_FFFF {
+        if size == Self::SIZE_VALUE_MARKER {
             None
         } else {
             Some(size)
+        }
+    }
+    pub fn new_value(attrs: &PspDirectoryEntryAttrs, value: u64) -> Self {
+        Self {
+            attrs: u32::from(*attrs).into(),
+            size: Self::SIZE_VALUE_MARKER.into(),
+            source: value.into(),
+        }
+    }
+    pub fn new_payload(attrs: &PspDirectoryEntryAttrs, size: u32, source: Location) -> Result<Self> {
+        if size == Self::SIZE_VALUE_MARKER {
+            Err(Error::PspDirectoryEntryTypeMismatch)
+        } else {
+            Ok(Self {
+                attrs: u32::from(*attrs).into(),
+                size: size.into(),
+                source: u64::from(source).into(),
+            })
         }
     }
 }
