@@ -247,6 +247,8 @@ pub trait DirectoryHeader {
     fn additional_info(&self) -> DirectoryAdditionalInfo;
     fn set_additional_info(&mut self, value: DirectoryAdditionalInfo);
     fn total_entries(&self) -> u32;
+    fn checksum(&self) -> u32;
+    fn set_checksum(&mut self, value: u32);
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
@@ -273,6 +275,12 @@ impl DirectoryHeader for PspDirectoryHeader {
     }
     fn total_entries(&self) -> u32 {
         self.total_entries.get()
+    }
+    fn checksum(&self) -> u32 {
+        self.checksum.get()
+    }
+    fn set_checksum(&mut self, value: u32) {
+        self.checksum.set(value)
     }
 }
 
@@ -547,6 +555,12 @@ impl DirectoryHeader for BiosDirectoryHeader {
     }
     fn total_entries(&self) -> u32 {
         self.total_entries.get()
+    }
+    fn checksum(&self) -> u32 {
+        self.checksum.get()
+    }
+    fn set_checksum(&mut self, value: u32) {
+        self.checksum.set(value)
     }
 }
 
