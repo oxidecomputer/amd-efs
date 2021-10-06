@@ -130,7 +130,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let mut buf = [0xFF; ERASURE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
-        assert!(((flash_input_block_size as usize) % ERASURE_BLOCK_SIZE) == 0);
+        // Good luck with that: assert!(((flash_input_block_size as usize) % ERASURE_BLOCK_SIZE) == 0);
         while flash_input_block_remainder > 0 {
             self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
             let mut count = ERASURE_BLOCK_SIZE as u32;
