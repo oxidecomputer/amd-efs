@@ -181,7 +181,8 @@ pub enum AddressMode {
 #[derive(Copy, Clone, Debug)]
 pub struct DirectoryAdditionalInfo {
     pub max_size: B10, // directory size in 4 KiB; Note: doc error in AMD docs
-    pub spi_block_size: B4, // spi block size in 4 KiB
+    #[skip(getters, setters)]
+    spi_block_size: B4, // spi block size in 4 KiB; TODO: 0 = 64 kiB
     pub base_address: B15, // base address in 4 KiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
     #[bits = 2]
     pub address_mode: AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
@@ -191,6 +192,39 @@ pub struct DirectoryAdditionalInfo {
 
 impl DirectoryAdditionalInfo {
     pub const UNIT: usize = 4096; // Byte
+    pub fn with_spi_block_size_checked(&mut self, value: u16) -> core::result::Result<Self, modular_bitfield::error::OutOfBounds> {
+        let mut result = *self;
+        result.set_spi_block_size_checked(value)?;
+        Ok(result)
+    }
+    pub fn with_spi_block_size(&mut self, value: u16) -> &mut Self {
+        self.with_spi_block_size_checked(value);
+        self
+    }
+    pub fn spi_block_size_or_err(&self) -> core::result::Result<u16, modular_bitfield::error::InvalidBitPattern<u8>> {
+        let spi_block_size = ((u32::from(*self) >> 10) & 0xf) as u16;
+        match spi_block_size {
+            0 => Ok(0x10), // 64 kiB
+            n => Ok(n),
+        }
+    }
+    pub fn spi_block_size(&self) -> u16 {
+        self.spi_block_size_or_err().unwrap()
+    }
+    pub fn set_spi_block_size_checked(&mut self, value: u16) -> core::result::Result<(), modular_bitfield::error::OutOfBounds> {
+        let mut mask = u32::from(*self) &! 0b1111_0000000000;
+        if value > 0 && value <= 15 {
+            mask |= (value as u32) << 10;
+        } else if value == 16 { // 64 kiB
+        } else {
+            return Err(modular_bitfield::error::OutOfBounds);
+        }
+        *self = Self::from(mask);
+        Ok(())
+    }
+    pub fn set_spi_block_size(&mut self, value: u16) {
+        self.set_spi_block_size_checked(value);
+    }
     /// Given a value, tries to convert it into UNIT without loss.  If that's not possible, returns None
     pub fn try_into_unit(value: usize) -> Option<u16> {
         if value % Self::UNIT == 0 {
@@ -684,5 +718,26 @@ mod tests {
         assert!(size_of::<PspDirectoryEntry>() == 16);
         assert!(size_of::<BiosDirectoryHeader>() == 16);
         assert!(size_of::<BiosDirectoryEntry>() == 24);
+    }
+
+    #[test]
+    fn test_directory_additional_info() {
+        let info = DirectoryAdditionalInfo::new().with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(0x1_0000).unwrap()).unwrap();
+        assert_eq!(u32::from(info), 0);
+
+        let info = DirectoryAdditionalInfo::new().with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(0x1000).unwrap()).unwrap();
+        assert_eq!(u32::from(info), 1 << 10);
+
+        let info = DirectoryAdditionalInfo::new().with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(0x2000).unwrap()).unwrap();
+        assert_eq!(u32::from(info), 2 << 10);
+
+        let info = DirectoryAdditionalInfo::new().with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(0xf000).unwrap()).unwrap();
+        assert_eq!(u32::from(info), 0xf << 10);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_directory_additional_info_invalid() {
+        let _info = DirectoryAdditionalInfo::new().with_spi_block_size_checked(0).unwrap();
     }
 }
