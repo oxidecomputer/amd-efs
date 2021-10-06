@@ -4,7 +4,6 @@ use byteorder::LittleEndian;
 use core::convert::TryInto;
 use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 use amd_flash::Location;
 use crate::types::ValueOrLocation;
 use crate::types::Error;
