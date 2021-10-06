@@ -1,6 +1,6 @@
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, BiosDirectoryEntryAttrs, BiosDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader};
+use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, BiosDirectoryEntryAttrs, BiosDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -55,7 +55,7 @@ pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<RW_BLOCK_SIZE
     _item: PhantomData<Item>,
 }
 
-impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: FromBytes + AsBytes, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: Copy + FromBytes + AsBytes + DirectoryEntry, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
     const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but good luck with modifying the first entry payload then.
     const MAX_DIRECTORY_ENTRIES: usize = ((Self::MAX_DIRECTORY_HEADERS_SIZE as usize) - size_of::<MainHeader>()) / size_of::<Item>();
@@ -202,15 +202,54 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
 
+    pub(crate) fn find_payload_empty_slot(&self, size: u32) -> Result<(Location, Location)> {
+        let mut entries = self.entries();
+        let contents_beginning = self.contents_beginning() as u64;
+        let contents_end = self.contents_end() as u64;
+        let mut frontier = 0u64;
+        for ref entry in entries {
+            let size = match entry.size() {
+                None => continue,
+                Some(x) => x as u64
+            };
+            match entry.source() {
+                ValueOrLocation::Location(x) => {
+                    if x >= contents_beginning && x + size <= contents_end {
+                        frontier = x + size; // FIXME bounds check
+                    }
+                },
+                _ => {
+                },
+            }
+        }
+        let frontier: Location = frontier.try_into().map_err(|_| Error::DirectoryPayloadRangeCheck)?;
+        let frontier_end = frontier.checked_add(size).ok_or(Error::DirectoryPayloadRangeCheck)?;
+        let (beginning, end) = T::grow_to_erasure_block(frontier, frontier_end);
+        if (end as u64) <= contents_end {
+            Ok((beginning, end))
+        } else {
+            Err(Error::DirectoryPayloadRangeCheck)
+        }
+    }
+
     /// ENTRY: The directory entry to put.  Note that we WILL set entry.source = payload_position in the copy we save on Flash.
     /// Result: Location where to put the payload.
-    pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Location> {
+    pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Option<Location>> {
         let total_entries = self.header.total_entries().checked_add(1).ok_or(Error::DirectoryRangeCheck)?;
         if Self::minimal_directory_headers_size(total_entries)? <= self.directory_headers_size { // there's still space
-            let entry_size = size_of::<Item>();
-            // FIXME: How to find where to put payload?  Iterate everything and find max (offset + size), if it's still <= contents_end() ? Then align.
-            todo!();
-            self.update_main_header_checksum()?;
+            match entry.size() {
+                None => {
+                    self.header.set_total_entries(total_entries);
+                    self.update_main_header_checksum()?;
+                    Ok(None)
+                },
+                Some(size) => { // has payload
+                    let (beginning, end) = self.find_payload_empty_slot(size)?;
+                    self.header.set_total_entries(total_entries);
+                    self.update_main_header_checksum()?;
+                    Ok(Some(beginning))
+                }
+            }
         } else {
             Err(Error::DirectoryRangeCheck)
         }
@@ -259,8 +298,15 @@ pub type BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, cons
 
 impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     // FIXME: Type-check
-    pub fn add_value_entry(&mut self, attrs: &PspDirectoryEntryAttrs, value: u64) -> Result<Location> {
-        self.add_entry(None, &PspDirectoryEntry::new_value(attrs, value))
+    pub fn add_value_entry(&mut self, attrs: &PspDirectoryEntryAttrs, value: u64) -> Result<()> {
+        match self.add_entry(None, &PspDirectoryEntry::new_value(attrs, value))? {
+            None => {
+                Ok(())
+            },
+            _ => {
+                Err(Error::PspDirectoryEntryTypeMismatch)
+            },
+        }
     }
 
     pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &PspDirectoryEntryAttrs, size: u32, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
@@ -268,8 +314,15 @@ impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BL
             None => 0,
             Some(x) => x
         })?)?;
-        self.add_payload(xpayload_position, size as usize, iterative_contents)?;
-        Ok(xpayload_position)
+        match xpayload_position {
+            None => {
+                Err(Error::PspDirectoryEntryTypeMismatch)
+            },
+            Some(pos) => {
+                self.add_payload(pos, size as usize, iterative_contents)?;
+                Ok(pos)
+            },
+        }
     }
 }
 
@@ -288,8 +341,15 @@ impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BL
             None => 0,
             Some(x) => x
         }, destination_location)?)?;
-        self.add_payload(xpayload_position, size as usize, iterative_contents)?;
-        Ok(xpayload_position)
+        match xpayload_position {
+            None => {
+                Err(Error::PspDirectoryEntryTypeMismatch)
+            },
+            Some(pos) => {
+                self.add_payload(pos, size as usize, iterative_contents)?;
+                Ok(pos)
+            },
+        }
     }
 }
 
