@@ -236,7 +236,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     /// Result: Location where to put the payload.
     pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Option<Location>> {
         let total_entries = self.header.total_entries().checked_add(1).ok_or(Error::DirectoryRangeCheck)?;
-        if Self::minimal_directory_headers_size(total_entries)? <= self.directory_headers_size { // there's still space
+        if Self::minimal_directory_headers_size(total_entries)? <= self.directory_headers_size { // there's still space for the directory entry
             match entry.size() {
                 None => {
                     self.header.set_total_entries(total_entries);
@@ -244,10 +244,14 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     Ok(None)
                 },
                 Some(size) => { // has payload
-                    let (beginning, end) = self.find_payload_empty_slot(size)?;
-                    self.header.set_total_entries(total_entries);
-                    self.update_main_header_checksum()?;
-                    Ok(Some(beginning))
+                    if size == 0 {
+                        Ok(None)
+                    } else {
+                        let (beginning, end) = self.find_payload_empty_slot(size)?;
+                        self.header.set_total_entries(total_entries);
+                        self.update_main_header_checksum()?;
+                        Ok(Some(beginning))
+                    }
                 }
             }
         } else {
@@ -327,13 +331,20 @@ impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BL
 }
 
 impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    pub fn add_entry_with_destination(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: usize, destination: u64) -> Result<()> {
-        todo!();
+    pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<Location>> {
+        self.add_entry(payload_position, &BiosDirectoryEntry::new_payload(attrs, size, 0, Some(destination_location))?)
     }
 
     pub fn add_apob_entry(&mut self, payload_position: Option<Location>, type_: BiosDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
         let attrs = BiosDirectoryEntryAttrs::new().with_type_(type_);
-        self.add_entry_with_destination(payload_position, &attrs, 0, ram_destination_address)
+        match self.add_entry_with_destination(payload_position, &attrs, 0, ram_destination_address)? {
+            None => {
+                Ok(())
+            },
+            _ => {
+                Err(Error::BiosDirectoryEntryTypeMismatch)
+            }
+        }
     }
 
     pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: u32, destination_location: Option<u64>, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
@@ -444,7 +455,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE,
         })
     }
     pub fn create(mut storage: T, processor_generation: ProcessorGeneration) -> Result<Self> {
-        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
                 let mut efh: Efh = Efh::default();
@@ -456,7 +467,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE,
             },
         }
 
-        storage.write_block(0x20_000, &buf)?;
+        storage.erase_and_write_block(0x20_000, &buf)?;
         Self::load(storage, Some(processor_generation))
     }
 
@@ -539,6 +550,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE,
     // Make sure there's no overlap (even when rounded to entire erasure blocks)
     fn ensure_no_overlap(&self, beginning: Location, end: Location) -> Result<()> {
         let (beginning, end) = T::grow_to_erasure_block(beginning, end);
+        // FIXME: check EFH no-overlap!
         match self.psp_directory() {
             Ok(psp_directory) => {
                 let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.directory_beginning(), psp_directory.directory_end());
