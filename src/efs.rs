@@ -57,8 +57,8 @@ pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<RW_BLOCK_SIZE
 
 impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: FromBytes + AsBytes, T: 'a + FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
-    const MAX_DIRECTORY_HEADERS_SIZE: usize = 0x400;
-    const MAX_DIRECTORY_ENTRIES: usize = (Self::MAX_DIRECTORY_HEADERS_SIZE - size_of::<MainHeader>()) / size_of::<Item>();
+    const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but good luck with modifying the first entry payload then.
+    const MAX_DIRECTORY_ENTRIES: usize = ((Self::MAX_DIRECTORY_HEADERS_SIZE as usize) - size_of::<MainHeader>()) / size_of::<Item>();
     /// Note: Caller has to check whether it is the right cookie!
     fn load(storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
@@ -73,9 +73,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                         location,
                         header: *header,
                         directory_headers_size: if contents_base == 0 {
+                            // Note: This means the number of entries cannot be changed (without moving ALL the payload--which we don't want).
                             size_of::<MainHeader>() as u32 + size_of::<Item>() as u32 * header.total_entries() // FIXME: Range check
                         } else {
-                            Self::MAX_DIRECTORY_HEADERS_SIZE.try_into().unwrap()
+                            Self::MAX_DIRECTORY_HEADERS_SIZE
                         },
                         _attrs: PhantomData,
                         _item: PhantomData,
@@ -108,7 +109,8 @@ fletcher.value().value()
                 let additional_info = DirectoryAdditionalInfo::new()
                   .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
-                  .with_base_address(0)
+                  // We put the actual payload at some distance from the directory, but still close-by--in order to be able to grow the directory later (when there's already payload)
+                  .with_base_address(DirectoryAdditionalInfo::try_into_unit((beginning.checked_add(Self::MAX_DIRECTORY_HEADERS_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
                   .with_address_mode(AddressMode::EfsRelativeOffset);
                 item.set_additional_info(additional_info);
                 storage.write_block(beginning, &buf)?;
