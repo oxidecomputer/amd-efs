@@ -96,11 +96,6 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 Err(Error::Marshal)
             },
         }
-/*
-let mut fletcher = AmdFletcher32::new();
-fletcher.update([1,2,3]);
-fletcher.value().value()
-*/
     }
     fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
@@ -129,9 +124,29 @@ fletcher.value().value()
         }
     }
     fn update_main_header_checksum(&mut self) -> Result<()> {
-        // let checksum_input_size = size_of::<MainHeader>().checked_add(self.header.total_entries.checked_mul(size_of::<Item>())?)?;
-        self.header.set_checksum(42); // FIXME
-        // FIXME: write_directory (main header and all the directory entries) (but not the payloads)
+        let checksum_input_skip_at_the_beginning: u32 = 8; // Fields "signature" and "checksum"
+        let flash_input_block_size = Self::minimal_directory_headers_size(self.header.total_entries())?;
+        let checksum_input_size = flash_input_block_size.checked_sub(checksum_input_skip_at_the_beginning).ok_or(Error::DirectoryRangeCheck)?;
+        let mut flash_input_block_address = self.directory_beginning();
+        let mut buf = [0xFF; RW_BLOCK_SIZE];
+        let mut flash_input_block_remainder = flash_input_block_size;
+        let mut checksummer = AmdFletcher32::new();
+        assert!(((flash_input_block_size as usize) % RW_BLOCK_SIZE) == 0);
+        while flash_input_block_remainder > 0 {
+            self.storage.read_block(flash_input_block_address, &mut buf)?;
+            let count = RW_BLOCK_SIZE as u32;
+            assert!(count % 2 == 0);
+            let block = &buf[..count as usize].chunks(2).map(|bytes| { u16::from_le_bytes(bytes.try_into().unwrap()) });
+            // TODO: Optimize performance
+            block.clone().for_each(|item: u16|
+                checksummer.update(&[item]));
+            flash_input_block_remainder -= count;
+            flash_input_block_address = flash_input_block_address.checked_add(count).ok_or(Error::DirectoryRangeCheck)?;
+        }
+
+        let checksum = checksummer.value().value();
+        self.header.set_checksum(checksum);
+        // FIXME: write main header--and at least the directory entries that are "in the way"
         Ok(())
     }
     fn directory_beginning(&self) -> Location {
