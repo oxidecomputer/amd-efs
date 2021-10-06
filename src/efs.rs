@@ -591,7 +591,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE,
     }
 
     fn write_efh(&mut self) -> Result<()> {
-        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         match header_from_collection_mut(&mut buf[..]) {
             Some(item) => {
                 *item = self.efh;
@@ -600,7 +600,7 @@ impl<T: FlashRead<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE,
             },
         }
 
-        self.storage.write_block(self.efh_beginning, &buf)?;
+        self.storage.erase_and_write_block(self.efh_beginning, &buf)?;
         Ok(())
     }
 
