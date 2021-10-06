@@ -180,10 +180,10 @@ pub enum AddressMode {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug)]
 pub struct DirectoryAdditionalInfo {
-    pub max_size: B10, // directory size in 4 KiB; Note: doc error in AMD docs
+    pub max_size: B10, // directory size in 4 kiB; Note: doc error in AMD docs
     #[skip(getters, setters)]
-    spi_block_size: B4, // spi block size in 4 KiB; TODO: 0 = 64 kiB
-    pub base_address: B15, // base address in 4 KiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
+    spi_block_size: B4, // spi block size in 4 kiB; TODO: 0 = 64 kiB
+    pub base_address: B15, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
     #[bits = 2]
     pub address_mode: AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
     #[skip]
