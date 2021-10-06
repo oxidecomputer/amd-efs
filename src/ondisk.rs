@@ -658,6 +658,8 @@ impl Default for BiosDirectoryEntry {
 }
 
 impl BiosDirectoryEntry {
+    const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
+    const DESTINATION_NONE_MARKER: u64 = 0xffff_ffff_ffff_ffff;
     pub fn type_(&self) -> BiosDirectoryEntryType {
         let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
         attrs.type_()
@@ -706,12 +708,16 @@ impl BiosDirectoryEntry {
     pub fn source(&self) -> ValueOrLocation {
         let size = self.size.get();
         let source = self.source.get();
-        let source = if size == 0xFFFF_FFFF { ValueOrLocation::Value(source) } else { ValueOrLocation::Location(source) };
+        let source = if size == Self::SIZE_VALUE_MARKER {
+            ValueOrLocation::Value(source)
+        } else {
+            ValueOrLocation::Location(source)
+        };
         source
     }
     pub fn size(&self) -> Option<u32> {
         let size = self.size.get();
-        if size == 0xFFFF_FFFF {
+        if size == Self::SIZE_VALUE_MARKER {
             None
         } else {
             Some(size)
@@ -719,10 +725,38 @@ impl BiosDirectoryEntry {
     }
     pub fn destination_location(&self) -> Option<u64> {
         let destination_location = self.destination_location.get();
-        if destination_location == 0xffff_ffff_ffff_ffff {
+        if destination_location == Self::DESTINATION_NONE_MARKER {
             None
         } else {
             Some(destination_location)
+        }
+    }
+    pub fn new_value(attrs: &BiosDirectoryEntryAttrs, value: u64) -> Self {
+        Self {
+            attrs: u32::from(*attrs).into(),
+            size: Self::SIZE_VALUE_MARKER.into(),
+            source: value.into(),
+            destination_location: Self::DESTINATION_NONE_MARKER.into(),
+        }
+    }
+    pub fn new_payload(attrs: &BiosDirectoryEntryAttrs, size: u32, source: Location, destination_location: Option<u64>) -> Result<Self> {
+        if size == Self::SIZE_VALUE_MARKER {
+            Err(Error::BiosDirectoryEntryTypeMismatch)
+        } else {
+            Ok(Self {
+                attrs: u32::from(*attrs).into(),
+                size: size.into(),
+                source: u64::from(source).into(),
+                destination_location: match destination_location {
+                    None => Self::DESTINATION_NONE_MARKER,
+                    Some(x) => {
+                        if x == Self::DESTINATION_NONE_MARKER {
+                            return Err(Error::BiosDirectoryEntryTypeMismatch);
+                        }
+                        x
+                    },
+                }.into(),
+            })
         }
     }
 }
