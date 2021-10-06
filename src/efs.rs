@@ -59,6 +59,11 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
     const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but good luck with modifying the first entry payload then.
     const MAX_DIRECTORY_ENTRIES: usize = ((Self::MAX_DIRECTORY_HEADERS_SIZE as usize) - size_of::<MainHeader>()) / size_of::<Item>();
+
+    fn minimal_directory_headers_size(total_entries: u32) -> Result<u32> {
+        Ok(size_of::<MainHeader>().checked_add(size_of::<Item>().checked_mul(total_entries as usize).ok_or(Error::DirectoryRangeCheck)?).ok_or(Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
+    }
+
     /// Note: Caller has to check whether it is the right cookie!
     fn load(storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; RW_BLOCK_SIZE] = [0; RW_BLOCK_SIZE];
@@ -74,8 +79,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                         header: *header,
                         directory_headers_size: if contents_base == 0 {
                             // Note: This means the number of entries cannot be changed (without moving ALL the payload--which we don't want).
-                            size_of::<MainHeader>() as u32 + size_of::<Item>() as u32 * header.total_entries() // FIXME: Range check
+                            Self::minimal_directory_headers_size(header.total_entries())?
                         } else {
+                            // Note: This means the number of entries can be changed even when payload is already present.
+                            // TODO: This is maybe still bad since we are only guaranteed 0x400 B of space, which is less than the following:
                             Self::MAX_DIRECTORY_HEADERS_SIZE
                         },
                         _attrs: PhantomData,
@@ -121,18 +128,21 @@ fletcher.value().value()
             },
         }
     }
+    fn update_main_header_checksum(&mut self) -> Result<()> {
+        // let checksum_input_size = size_of::<MainHeader>().checked_add(self.header.total_entries.checked_mul(size_of::<Item>())?)?;
+        self.header.set_checksum(42); // FIXME
+        // FIXME: write_directory (main header and all the directory entries) (but not the payloads)
+        Ok(())
+    }
     fn directory_beginning(&self) -> Location {
         let additional_info = self.header.additional_info();
         let contents_base = DirectoryAdditionalInfo::try_from_unit(additional_info.base_address()).unwrap();
-        if contents_base == 0 { // skip Main Header
-            self.location + size_of::<MainHeader>() as Location // FIXME: range check
-        } else { // The main header is somewhere completely different
-            self.location
-        }
+        self.location + size_of::<MainHeader>() as Location // FIXME: range check
     }
     /// This will return whatever space is allocated--whether it's in use or not!
     fn directory_end(&self) -> Location {
-        let headers_size: Location = self.directory_headers_size.try_into().unwrap();
+        let headers_size = self.directory_headers_size;
+        assert!((headers_size as usize) >= size_of::<MainHeader>());
         self.location + headers_size // FIXME: range check
     }
     fn contents_beginning(&self) -> Location {
@@ -149,7 +159,7 @@ fletcher.value().value()
         let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
         // Assumption: SIZE includes the size of the main directory header.
         // FIXME: What happens in the case contents_base != 0 ?  I think then it doesn't include it.
-        self.contents_beginning() + size - size_of::<MainHeader>() as u32 // FIXME: range check
+        self.contents_beginning() + size - self.directory_headers_size // FIXME: range check
     }
     pub fn entries(&self) -> DirectoryIter<Item, T, RW_BLOCK_SIZE> {
         let additional_info = self.header.additional_info();
@@ -164,48 +174,94 @@ fletcher.value().value()
         }
     }
 
-    pub(crate) fn add_entry(&mut self, attrs: &Attrs, size: usize) -> Result<()> {
-        // FIXME: Actually increase header.total_entries (if there's still space)
-        let entry_size = size_of::<Item>();
-        let directory_end = self.directory_end();
-        todo!();
+    /// ENTRY: The directory entry to put.  Note that we WILL set entry.source = payload_position in the copy we save on Flash.
+    /// Result: Location where to put the payload.
+    pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Location> {
+        let total_entries = self.header.total_entries().checked_add(1).ok_or(Error::DirectoryRangeCheck)?;
+        if Self::minimal_directory_headers_size(total_entries)? <= self.directory_headers_size { // there's still space
+            let entry_size = size_of::<Item>();
+            // FIXME: How to find where to put payload?  Iterate everything and find max (offset + size), if it's still <= contents_end() ? Then align.
+            todo!();
+            self.update_main_header_checksum()?;
+        } else {
+            Err(Error::DirectoryRangeCheck)
+        }
     }
 
-    /// Repeatedly calls ITERATIVE_CONTENTS, which fills BUF as much as possible.  Returns the number of u8 that are filled in BUF.
-    /// It is only allowed to return a number of u8 that are filled in BUF smaller than the possible size if the blob is ending.
-    pub fn add_blob_entry(&mut self, attrs: &Attrs, size: usize, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
+    /// Repeatedly calls GENERATE_CONTENTS, which fills it's passed buffer as much as possible, as long as the total <= SIZE.
+    /// GENERATE_CONTENTS can only return a number (of u8 that are filled in BUF) smaller than the possible size if the blob is ending.
+    pub(crate) fn add_payload(&mut self, payload_position: Location, size: usize, generate_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
         let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
-        loop {
-            let count = iterative_contents(&mut buf)?;
+        let mut remaining_size = size;
+        let mut payload_position = payload_position;
+        while remaining_size > 0 {
+            let count = generate_contents(&mut buf)?;
             if count == 0 {
                 break;
             }
-            // FIXME: actually add BUF to the directory.
+// too magical
+//            if count > remaining_size {
+//                count = remaining_size;
+//                for i in count..ERASURE_BLOCK_SIZE {
+//                    buf[i] = 0xFF;
+//                }
+//            }
+
+            let end = (payload_position as usize).checked_add(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
+            if end >= self.contents_end() as usize {
+                return Err(Error::DirectoryPayloadRangeCheck);
+            }
+            remaining_size = remaining_size.checked_sub(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
+            self.storage.erase_and_write_block(payload_position, &buf);
+            payload_position = end as Location;
             if count < buf.len() {
                 break;
             }
         }
-        self.add_entry(attrs, size)
-    }
-
-    // FIXME: Make private
-    pub fn add_value_entry(&mut self, attrs: &Attrs, value: u64) -> Result<()> {
-        // FIXME
-        todo!();
+        if remaining_size == 0 {
+            Ok(())
+        } else {
+            Err(Error::DirectoryPayloadRangeCheck)
+        }
     }
 }
 
 pub type PspDirectory<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, 0x3000, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
 pub type BiosDirectory<'a, T: FlashRead<RW_BLOCK_SIZE>, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, 0x1000, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>;
 
+impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    // FIXME: Type-check
+    pub fn add_value_entry(&mut self, attrs: &PspDirectoryEntryAttrs, value: u64) -> Result<Location> {
+        self.add_entry(None, &PspDirectoryEntry::new_value(attrs, value))
+    }
+
+    pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &PspDirectoryEntryAttrs, size: u32, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
+        let xpayload_position = self.add_entry(payload_position, &PspDirectoryEntry::new_payload(attrs, size, match payload_position {
+            None => 0,
+            Some(x) => x
+        })?)?;
+        self.add_payload(xpayload_position, size as usize, iterative_contents)?;
+        Ok(xpayload_position)
+    }
+}
+
 impl<'a, T: 'a + FlashRead<RW_BLOCK_SIZE> + FlashWrite<RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const RW_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, SPI_BLOCK_SIZE, RW_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    pub fn add_entry_with_destination(&mut self, attrs: &BiosDirectoryEntryAttrs, size: usize, destination: u64) -> Result<()> {
+    pub fn add_entry_with_destination(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: usize, destination: u64) -> Result<()> {
         todo!();
     }
 
-    pub fn add_apob_entry(&mut self, type_: BiosDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
+    pub fn add_apob_entry(&mut self, payload_position: Option<Location>, type_: BiosDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
         let attrs = BiosDirectoryEntryAttrs::new().with_type_(type_);
-        self.add_entry_with_destination(&attrs, 0, ram_destination_address)
+        self.add_entry_with_destination(payload_position, &attrs, 0, ram_destination_address)
+    }
+
+    pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: u32, destination_location: Option<u64>, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
+        let xpayload_position = self.add_entry(payload_position, &BiosDirectoryEntry::new_payload(attrs, size, match payload_position {
+            None => 0,
+            Some(x) => x
+        }, destination_location)?)?;
+        self.add_payload(xpayload_position, size as usize, iterative_contents)?;
+        Ok(xpayload_position)
     }
 }
 
