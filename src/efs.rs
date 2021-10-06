@@ -98,12 +98,11 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
     fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
-        let mut buf: [u8; RW_BLOCK_SIZE] = [0xFF; RW_BLOCK_SIZE];
+        let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         match header_from_collection_mut::<MainHeader>(&mut buf[..]) {
             Some(item) => {
                 *item = MainHeader::default();
                 item.set_cookie(cookie);
-                // FIXME: Erase
                 // Note: It is valid that ERASURE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
                 if Self::SPI_BLOCK_SIZE % ERASURE_BLOCK_SIZE != 0 {
                     return Err(Error::DirectoryRangeCheck);
@@ -115,7 +114,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                   .with_base_address(DirectoryAdditionalInfo::try_into_unit((beginning.checked_add(Self::MAX_DIRECTORY_HEADERS_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
                   .with_address_mode(AddressMode::EfsRelativeOffset);
                 item.set_additional_info(additional_info);
-                storage.write_block(beginning, &buf)?;
+                storage.erase_and_write_block(beginning, &buf)?;
                 Self::load(storage, beginning)
             }
             None => {
@@ -128,13 +127,16 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let flash_input_block_size = Self::minimal_directory_headers_size(self.header.total_entries())?;
         let checksum_input_size = flash_input_block_size.checked_sub(checksum_input_skip_at_the_beginning).ok_or(Error::DirectoryRangeCheck)?;
         let mut flash_input_block_address = self.directory_beginning();
-        let mut buf = [0xFF; RW_BLOCK_SIZE];
+        let mut buf = [0xFF; ERASURE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
-        assert!(((flash_input_block_size as usize) % RW_BLOCK_SIZE) == 0);
+        assert!(((flash_input_block_size as usize) % ERASURE_BLOCK_SIZE) == 0);
         while flash_input_block_remainder > 0 {
-            self.storage.read_block(flash_input_block_address, &mut buf)?;
-            let count = RW_BLOCK_SIZE as u32;
+            self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
+            let mut count = ERASURE_BLOCK_SIZE as u32;
+            if count > flash_input_block_remainder {
+                count = flash_input_block_remainder;
+            }
             assert!(count % 2 == 0);
             let block = &buf[..count as usize].chunks(2).map(|bytes| { u16::from_le_bytes(bytes.try_into().unwrap()) });
             // TODO: Optimize performance
@@ -146,7 +148,18 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
 
         let checksum = checksummer.value().value();
         self.header.set_checksum(checksum);
-        // FIXME: write main header--and at least the directory entries that are "in the way"
+        flash_input_block_address = self.directory_beginning();
+        self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
+        // Write main header--and at least the directory entries that are "in the way"
+        match header_from_collection_mut::<MainHeader>(&mut buf[..size_of::<MainHeader>()]) {
+            Some(item) => {
+                *item = self.header;
+            },
+            None => {
+                return Err(Error::DirectoryRangeCheck);
+            },
+        }
+        self.storage.erase_and_write_block(flash_input_block_address, &buf)?;
         Ok(())
     }
     fn directory_beginning(&self) -> Location {
