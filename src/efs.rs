@@ -53,7 +53,7 @@ pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<ERASURE_BLOCK
 
 impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: Copy + FromBytes + AsBytes + DirectoryEntry + std::fmt::Debug, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
-    const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but good luck with modifying the first entry payload then.
+    const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but then good luck with modifying the first entry payload without clobbering the directory that comes right before it.
     const MAX_DIRECTORY_ENTRIES: usize = ((Self::MAX_DIRECTORY_HEADERS_SIZE as usize) - size_of::<MainHeader>()) / size_of::<Item>();
 
     fn minimal_directory_headers_size(total_entries: u32) -> Result<u32> {
@@ -196,7 +196,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         DirectoryIter::<Item, T, ERASURE_BLOCK_SIZE> {
             storage: self.storage,
             beginning: self.directory_beginning(),
-            end: self.directory_end(), // actually, much earlier--when total_entries is over.
+            end: self.directory_end(), // actually, much earlier--this here is the allocation, not the actual size
             total_entries: self.header.total_entries(),
             index: 0u32,
             _item: PhantomData,
@@ -208,6 +208,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let contents_beginning = self.contents_beginning() as u64;
         let contents_end = self.contents_end() as u64;
         let mut frontier: u64 = self.contents_beginning().into();
+        // TODO: Also use gaps between entries
         for ref entry in entries {
             let size = match entry.size() {
                 None => continue,
@@ -237,7 +238,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         let buf_index = (directory_entry_position as usize) % ERASURE_BLOCK_SIZE;
         self.storage.read_erasure_block(directory_entry_position - (buf_index as Location), &mut buf)?;
-        // FIXME: what this straddles two different blocks?
+        // FIXME: what if this straddles two different blocks?
         match header_from_collection_mut::<Item>(&mut buf[buf_index..buf_index + size_of::<Item>()]) {
             Some(item) => {
                 *item = *entry;
@@ -249,7 +250,8 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
         Ok(())
     }
-    /// ENTRY: The directory entry to put.  Note that we WILL set entry.source = payload_position in the copy we save on Flash.
+    /// PAYLOAD_POSITION: If you have a position on the Flash that you want this fn to use, specify it.  Otherwise, one will be calculated.
+    /// ENTRY: The directory entry to put.  Note that we WILL set entry.source = (maybe calculated) payload_position in the copy we save on Flash.
     /// Result: Location where to put the payload.
     pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Option<Location>> {
         let total_entries = self.header.total_entries().checked_add(1).ok_or(Error::DirectoryRangeCheck)?;
@@ -629,7 +631,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
     }
 
     /// Note: BEGINNING, END are coordinates (in Byte).
-    /// Note: We always create the directory and the contents adjacent without gap.
+    /// Note: We always create the directory and the contents adjacent, with gap in order to allow creating new directory entries when there are already contents.
     pub fn create_bhd_directory(&mut self, beginning: Location, end: Location) -> Result<BhdDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
