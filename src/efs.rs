@@ -202,7 +202,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let mut entries = self.entries();
         let contents_beginning = self.contents_beginning() as u64;
         let contents_end = self.contents_end() as u64;
-        let mut frontier = 0u64;
+        let mut frontier: u64 = self.contents_beginning().into();
         for ref entry in entries {
             let size = match entry.size() {
                 None => continue,
@@ -244,7 +244,9 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                         Ok(None)
                     } else {
                         let (beginning, end) = self.find_payload_empty_slot(size)?;
+                        eprintln!("PAYLOAD EMPTY SLOT {}", beginning);
                         self.header.set_total_entries(total_entries);
+                        // FIXME: Add the actual directory entry; in there, fix up source!
                         self.update_main_header_checksum()?;
                         Ok(Some(beginning))
                     }
