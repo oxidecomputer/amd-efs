@@ -120,17 +120,15 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
     /// Updates the main header checksum.  Also updates total_entries (in the same header) to TOTAL_ENTRIES.
-    fn update_main_header_checksum(&mut self, total_entries: u32) -> Result<()> {
+    fn update_main_header(&mut self, total_entries: u32) -> Result<()> {
         self.header.set_total_entries(total_entries); // TODO: revert on error
-        let checksum_input_skip_at_the_beginning: u32 = 8; // Fields "signature" and "checksum"
-        let flash_input_block_size = Self::minimal_directory_headers_size(self.header.total_entries())?;
-        let checksum_input_size = flash_input_block_size.checked_sub(checksum_input_skip_at_the_beginning).ok_or(Error::DirectoryRangeCheck)?;
+        let flash_input_block_size = Self::minimal_directory_headers_size(total_entries)?;
         let mut flash_input_block_address: Location = self.location.into();
         let mut buf = [0xFF; ERASABLE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
         // Good luck with that: assert!(((flash_input_block_size as usize) % ERASABLE_BLOCK_SIZE) == 0);
-        let mut skip: usize = checksum_input_skip_at_the_beginning as usize;
+        let mut skip: usize = 8; // Skip fields "signature" and "checksum"
         while flash_input_block_remainder > 0 {
             self.storage.read_exact(flash_input_block_address, &mut buf)?;
             let mut count = ERASABLE_BLOCK_SIZE as u32;
@@ -138,7 +136,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 count = flash_input_block_remainder;
             }
             assert!(count % 2 == 0);
-            assert!(count >= 8);
+            assert!(count as usize >= skip);
             let block = &buf[skip..count as usize].chunks(2).map(|bytes| { u16::from_le_bytes(bytes.try_into().unwrap()) });
             skip = 0;
             // TODO: Optimize performance
@@ -290,7 +288,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             }
             let location: Location = self.location.into();
             self.write_directory_entry(location + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
-            self.update_main_header_checksum(total_entries)?;
+            self.update_main_header(total_entries)?;
             Ok(result)
         } else {
             Err(Error::DirectoryRangeCheck)
