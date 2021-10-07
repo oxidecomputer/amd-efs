@@ -122,7 +122,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let checksum_input_skip_at_the_beginning: u32 = 8; // Fields "signature" and "checksum"
         let flash_input_block_size = Self::minimal_directory_headers_size(self.header.total_entries())?;
         let checksum_input_size = flash_input_block_size.checked_sub(checksum_input_skip_at_the_beginning).ok_or(Error::DirectoryRangeCheck)?;
-        let mut flash_input_block_address = self.directory_beginning();
+        let mut flash_input_block_address = self.location;
         let mut buf = [0xFF; ERASURE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
@@ -144,7 +144,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
 
         let checksum = checksummer.value().value();
         self.header.set_checksum(checksum);
-        flash_input_block_address = self.directory_beginning();
+        flash_input_block_address = self.location;
         self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
         // Write main header--and at least the directory entries that are "in the way"
         match header_from_collection_mut::<MainHeader>(&mut buf[..size_of::<MainHeader>()]) {
@@ -274,7 +274,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     entry.set_source(ValueOrLocation::Location(beginning.into()));
                 }
             }
-            self.write_directory_entry(self.directory_beginning() + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
+            self.write_directory_entry(self.location + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
             self.update_main_header_checksum()?;
             Ok(result)
         } else {
