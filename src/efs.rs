@@ -1,4 +1,4 @@
-use amd_flash::{FlashRead, FlashWrite, Location};
+use amd_flash::{FlashRead, FlashWrite, Location, ErasableLocation};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
 use crate::ondisk::{BhdDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BhdDirectoryEntry, BhdDirectoryEntryAttrs, BhdDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry};
 pub use crate::ondisk::ProcessorGeneration;
@@ -8,6 +8,7 @@ use crate::types::ValueOrLocation;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 use core::mem::size_of;
+use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::marker::PhantomData;
 use crate::amdfletcher32::AmdFletcher32;
@@ -44,7 +45,7 @@ impl<'a, Item: FromBytes + Copy, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE
 // TODO: split into Directory and DirectoryContents (disjunct) if requested in additional_info.
 pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, Attrs: Sized, const _SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
-    location: Location,
+    location: Location, // ideally ErasableLocation<ERASURE_BLOCK_SIZE>--but that's impossible with AMD-generated images.
     pub header: MainHeader, // FIXME: make read-only
     directory_headers_size: u32,
     _attrs: PhantomData<Attrs>,
@@ -93,7 +94,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             },
         }
     }
-    fn create(storage: &'a mut T, beginning: Location, end: Location, cookie: [u8; 4]) -> Result<Self> {
+    fn create(storage: &'a mut T, beginning: ErasableLocation<ERASURE_BLOCK_SIZE>, end: ErasableLocation<ERASURE_BLOCK_SIZE>, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         match header_from_collection_mut::<MainHeader>(&mut buf[..]) {
             Some(item) => {
@@ -104,14 +105,14 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     return Err(Error::DirectoryRangeCheck);
                 }
                 let additional_info = DirectoryAdditionalInfo::new()
-                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit((end - beginning).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
+                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit(ErasableLocation::<ERASURE_BLOCK_SIZE>::distance_between(beginning, end).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   // We put the actual payload at some distance from the directory, but still close-by--in order to be able to grow the directory later (when there's already payload)
-                  .with_base_address(DirectoryAdditionalInfo::try_into_unit((beginning.checked_add(Self::MAX_DIRECTORY_HEADERS_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
+                  .with_base_address(DirectoryAdditionalInfo::try_into_unit((Location::from(beginning).checked_add(Self::MAX_DIRECTORY_HEADERS_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
                   .with_address_mode(AddressMode::EfsRelativeOffset);
                 item.set_additional_info(additional_info);
                 storage.erase_and_write_block(beginning, &buf)?;
-                Self::load(storage, beginning)
+                Self::load(storage, Location::from(beginning))
             }
             None => {
                 Err(Error::Marshal)
@@ -124,14 +125,14 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let checksum_input_skip_at_the_beginning: u32 = 8; // Fields "signature" and "checksum"
         let flash_input_block_size = Self::minimal_directory_headers_size(self.header.total_entries())?;
         let checksum_input_size = flash_input_block_size.checked_sub(checksum_input_skip_at_the_beginning).ok_or(Error::DirectoryRangeCheck)?;
-        let mut flash_input_block_address = self.location;
+        let mut flash_input_block_address: Location = self.location.into();
         let mut buf = [0xFF; ERASURE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
         // Good luck with that: assert!(((flash_input_block_size as usize) % ERASURE_BLOCK_SIZE) == 0);
         let mut skip: usize = checksum_input_skip_at_the_beginning as usize;
         while flash_input_block_remainder > 0 {
-            self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
+            self.storage.read_exact(flash_input_block_address, &mut buf)?;
             let mut count = ERASURE_BLOCK_SIZE as u32;
             if count > flash_input_block_remainder {
                 count = flash_input_block_remainder;
@@ -149,7 +150,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
 
         let checksum = checksummer.value().value();
         self.header.set_checksum(checksum);
-        flash_input_block_address = self.location;
+        let flash_input_block_address = ErasableLocation::<ERASURE_BLOCK_SIZE>::try_from(self.location)?;
         self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
         // Write main header--and at least the directory entries that are "in the way"
         match header_from_collection_mut::<MainHeader>(&mut buf[..size_of::<MainHeader>()]) {
@@ -166,29 +167,36 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     fn directory_beginning(&self) -> Location {
         let additional_info = self.header.additional_info();
         let contents_base = DirectoryAdditionalInfo::try_from_unit(additional_info.base_address()).unwrap();
-        self.location + size_of::<MainHeader>() as Location // FIXME: range check
+        let location: Location = self.location.into();
+        location + size_of::<MainHeader>() as Location // FIXME: range check
     }
     /// This will return whatever space is allocated--whether it's in use or not!
     fn directory_end(&self) -> Location {
         let headers_size = self.directory_headers_size;
         assert!((headers_size as usize) >= size_of::<MainHeader>());
-        self.location + headers_size // FIXME: range check
+        let location: Location = self.location.into();
+        // Note: should be erasable (but we don't care on this side; on the other hand, see contents_beginning)
+        location + headers_size // FIXME: range check
     }
     fn contents_beginning(&self) -> Location {
         let additional_info = self.header.additional_info();
         let contents_base = DirectoryAdditionalInfo::try_from_unit(additional_info.base_address()).unwrap();
         if contents_base == 0 {
-            self.directory_end()
+            self.directory_end().try_into().unwrap()
         } else {
-            contents_base.try_into().unwrap()
+            let base: u32 = contents_base.try_into().unwrap();
+            base
+            // We'd like to do ErasableLocation::<ERASURE_BLOCK_SIZE>::try_from(base).unwrap(), but AMD-provided images do not actually have the first payload content aligned.  So we don't.
         }
     }
-    fn contents_end(&self) -> Location {
+    fn contents_end(&self) -> ErasableLocation<ERASURE_BLOCK_SIZE> {
         let additional_info = self.header.additional_info();
         let size: u32 = DirectoryAdditionalInfo::try_from_unit(additional_info.max_size()).unwrap().try_into().unwrap();
+        let location = Location::from(self.contents_beginning());
         // Assumption: SIZE includes the size of the main directory header.
         // FIXME: What happens in the case contents_base != 0 ?  I think then it doesn't include it.
-        self.contents_beginning() + size - self.directory_headers_size // FIXME: range check
+        let end = location + size - self.directory_headers_size; // FIXME: range check
+        ErasableLocation::<ERASURE_BLOCK_SIZE>::try_from(end).unwrap()
     }
     pub fn entries(&self) -> DirectoryIter<Item, T, ERASURE_BLOCK_SIZE> {
         let additional_info = self.header.additional_info();
@@ -203,11 +211,11 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
 
-    pub(crate) fn find_payload_empty_slot(&self, size: u32) -> Result<Location> {
+    pub(crate) fn find_payload_empty_slot(&self, size: u32) -> Result<ErasableLocation<ERASURE_BLOCK_SIZE>> {
         let mut entries = self.entries();
-        let contents_beginning = self.contents_beginning() as u64;
-        let contents_end = self.contents_end() as u64;
-        let mut frontier: u64 = self.contents_beginning().into();
+        let contents_beginning = Location::from(self.contents_beginning()) as u64;
+        let contents_end = Location::from(self.contents_end()) as u64;
+        let mut frontier: u64 = contents_beginning;
         // TODO: Also use gaps between entries
         for ref entry in entries {
             let size = match entry.size() {
@@ -231,18 +239,20 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let frontier: Location = frontier.try_into().map_err(|_| Error::DirectoryPayloadRangeCheck)?;
         let frontier_end = frontier.checked_add(size).ok_or(Error::DirectoryPayloadRangeCheck)?;
         let (_, frontier) = T::grow_to_erasure_block(frontier, frontier);
-        Ok(frontier)
+        Ok(frontier.try_into()?)
     }
 
     pub(crate) fn write_directory_entry(&mut self, directory_entry_position: Location, entry: &Item) -> Result<()> {
         let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         let buf_index = (directory_entry_position as usize) % ERASURE_BLOCK_SIZE;
-        self.storage.read_erasure_block(directory_entry_position - (buf_index as Location), &mut buf)?;
+        let beginning = directory_entry_position - (buf_index as Location); // align
+        let beginning = beginning.try_into().map_err(|_| Error::Misaligned)?;
+        self.storage.read_erasure_block(beginning, &mut buf)?;
         // FIXME: what if this straddles two different blocks?
         match header_from_collection_mut::<Item>(&mut buf[buf_index..buf_index + size_of::<Item>()]) {
             Some(item) => {
                 *item = *entry;
-                self.storage.erase_and_write_block(directory_entry_position - (buf_index as Location), &buf)?;
+                self.storage.erase_and_write_block(beginning, &buf)?;
             },
             None => {
                 return Err(Error::DirectoryRangeCheck);
@@ -253,10 +263,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     /// PAYLOAD_POSITION: If you have a position on the Flash that you want this fn to use, specify it.  Otherwise, one will be calculated.
     /// ENTRY: The directory entry to put.  Note that we WILL set entry.source = (maybe calculated) payload_position in the copy we save on Flash.
     /// Result: Location where to put the payload.
-    pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Option<Location>> {
+    pub(crate) fn add_entry(&mut self, payload_position: Option<ErasableLocation<ERASURE_BLOCK_SIZE>>, entry: &Item) -> Result<Option<ErasableLocation<ERASURE_BLOCK_SIZE>>> {
         let total_entries = self.header.total_entries().checked_add(1).ok_or(Error::DirectoryRangeCheck)?;
         if Self::minimal_directory_headers_size(total_entries)? <= self.directory_headers_size { // there's still space for the directory entry
-            let result: Option<Location>;
+            let result: Option<ErasableLocation<ERASURE_BLOCK_SIZE>>;
             match entry.size() {
                 None => {
                     result = None
@@ -275,10 +285,11 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 None => {
                 },
                 Some(beginning) => {
-                    entry.set_source(ValueOrLocation::Location(beginning.into()));
+                    entry.set_source(ValueOrLocation::Location(Location::from(beginning).into()));
                 }
             }
-            self.write_directory_entry(self.location + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
+            let location: Location = self.location.into();
+            self.write_directory_entry(location + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
             self.update_main_header_checksum(total_entries)?;
             Ok(result)
         } else {
@@ -288,30 +299,32 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
 
     /// Repeatedly calls GENERATE_CONTENTS, which fills it's passed buffer as much as possible, as long as the total <= SIZE.
     /// GENERATE_CONTENTS can only return a number (of u8 that are filled in BUF) smaller than the possible size if the blob is ending.
-    pub(crate) fn add_payload(&mut self, payload_position: Location, size: usize, generate_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
+    pub(crate) fn add_payload(&mut self, payload_position: ErasableLocation<ERASURE_BLOCK_SIZE>, size: usize, generate_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
         let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
         let mut remaining_size = size;
         let mut payload_position = payload_position;
+        let contents_end = Location::from(self.contents_end()) as usize;
         while remaining_size > 0 {
-            let count = generate_contents(&mut buf)?;
+            let mut count = generate_contents(&mut buf)?;
             if count == 0 {
                 break;
             }
-// too magical
-//            if count > remaining_size {
-//                count = remaining_size;
-//                for i in count..ERASURE_BLOCK_SIZE {
-//                    buf[i] = 0xFF;
-//                }
-//            }
+            if count > remaining_size {
+                count = remaining_size;
+            }
+            if count < buf.len() {
+                for i in count..buf.len() {
+                    buf[i] = 0xFF;
+                }
+            }
 
-            let end = (payload_position as usize).checked_add(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
-            if end >= self.contents_end() as usize {
+            let end = (Location::from(payload_position) as usize).checked_add(ERASURE_BLOCK_SIZE).ok_or(Error::DirectoryPayloadRangeCheck)?;
+            if end > contents_end as usize {
                 return Err(Error::DirectoryPayloadRangeCheck);
             }
             remaining_size = remaining_size.checked_sub(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
             self.storage.erase_and_write_block(payload_position, &buf)?;
-            payload_position = end as Location;
+            payload_position = payload_position.advance(ERASURE_BLOCK_SIZE)?;
             if count < buf.len() {
                 break;
             }
@@ -340,10 +353,10 @@ impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>,
         }
     }
 
-    pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &PspDirectoryEntryAttrs, size: u32, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
+    pub fn add_blob_entry(&mut self, payload_position: Option<ErasableLocation<ERASURE_BLOCK_SIZE>>, attrs: &PspDirectoryEntryAttrs, size: u32, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<ErasableLocation<ERASURE_BLOCK_SIZE>> {
         let xpayload_position = self.add_entry(payload_position, &PspDirectoryEntry::new_payload(attrs, size, match payload_position {
             None => 0,
-            Some(x) => x
+            Some(x) => x.into()
         })?)?;
         match xpayload_position {
             None => {
@@ -358,11 +371,11 @@ impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>,
 }
 
 impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<Location>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<Location>> {
+    pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<ErasableLocation<ERASURE_BLOCK_SIZE>>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<ErasableLocation<ERASURE_BLOCK_SIZE>>> {
         self.add_entry(payload_position, &BhdDirectoryEntry::new_payload(attrs, size, 0, Some(destination_location))?)
     }
 
-    pub fn add_apob_entry(&mut self, payload_position: Option<Location>, type_: BhdDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
+    pub fn add_apob_entry(&mut self, payload_position: Option<ErasableLocation<ERASURE_BLOCK_SIZE>>, type_: BhdDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
         let attrs = BhdDirectoryEntryAttrs::new().with_type_(type_);
         match self.add_entry_with_destination(payload_position, &attrs, 0, ram_destination_address)? {
             None => {
@@ -374,14 +387,14 @@ impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>,
         }
     }
 
-    pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: Option<u64>, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
+    pub fn add_blob_entry(&mut self, payload_position: Option<ErasableLocation<ERASURE_BLOCK_SIZE>>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: Option<u64>, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<ErasableLocation<ERASURE_BLOCK_SIZE>> {
         let xpayload_position = self.add_entry(payload_position, &BhdDirectoryEntry::new_payload(attrs, size, match payload_position {
             None => 0,
-            Some(x) => x
+            Some(x) => x.into()
         }, destination_location)?)?;
         match xpayload_position {
             None => {
-                Err(Error::PspDirectoryEntryTypeMismatch)
+                Err(Error::BhdDirectoryEntryTypeMismatch)
             },
             Some(pos) => {
                 self.add_payload(pos, size as usize, iterative_contents)?;
@@ -421,13 +434,13 @@ impl<'a, T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, cons
 // TODO: Borrow storage.
 pub struct Efs<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> {
     storage: T,
-    efh_beginning: u32,
+    efh_beginning: ErasableLocation<ERASURE_BLOCK_SIZE>,
     efh: Efh,
 }
 
 impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> Efs<T, ERASURE_BLOCK_SIZE> {
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again (I think it would be better to have the user just construct two different Efs instances in that case)
-    pub(crate) fn embedded_firmware_header_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<u32> {
+    pub(crate) fn embedded_firmware_header_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<ErasableLocation<ERASURE_BLOCK_SIZE>> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; ERASURE_BLOCK_SIZE] = [0; ERASURE_BLOCK_SIZE];
             storage.read_exact(*position, &mut xbuf)?;
@@ -438,7 +451,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                         Some(x) => item.compatible_with_processor_generation(x),
                         None => true,
                     } {
-                        return Ok(*position);
+                        return Ok(ErasableLocation::<ERASURE_BLOCK_SIZE>::try_from(*position)?);
                     }
                 },
                 None => {
@@ -456,7 +469,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                         None => true,
                         _ => false,
                     } {
-                        return Ok(*position);
+                        return Ok(ErasableLocation::<ERASURE_BLOCK_SIZE>::try_from(*position)?);
                     }
                 },
                 None => {
@@ -469,7 +482,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
     pub fn load(storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
         let efh_beginning = Self::embedded_firmware_header_beginning(&storage, processor_generation)?;
         let mut xbuf: [u8; ERASURE_BLOCK_SIZE] = [0; ERASURE_BLOCK_SIZE];
-        storage.read_exact(efh_beginning, &mut xbuf)?;
+        storage.read_erasure_block(efh_beginning, &mut xbuf)?;
         let efh = header_from_collection::<Efh>(&xbuf[..]).ok_or_else(|| Error::EfsHeaderNotFound)?;
         if efh.signature.get() != 0x55aa_55aa {
             return Err(Error::EfsHeaderNotFound);
@@ -494,7 +507,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
             },
         }
 
-        storage.erase_and_write_block(0x20_000, &buf)?;
+        storage.erase_and_write_block(ErasableLocation::<ERASURE_BLOCK_SIZE>::try_from(0x20_000u32)?, &buf)?;
         Self::load(storage, Some(processor_generation))
     }
 
@@ -548,8 +561,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                         if psp_directory_table_location >= 0x1_0000_0000 {
                             return Err(Error::PspDirectoryEntryTypeMismatch)
                         } else {
-                            let psp_directory_table_location = psp_directory_table_location as u32;
-                            let directory = PspDirectory::load(&self.storage, psp_directory_table_location)?;
+                            let directory = PspDirectory::load(&self.storage, psp_directory_table_location.try_into().map_err(|_| Error::DirectoryRangeCheck)?)?;
                             return Ok(directory);
                         }
                     },
@@ -585,7 +597,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                 if intersection_beginning < intersection_end {
                     return Err(Error::Overlap);
                 }
-                let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.contents_beginning(), psp_directory.contents_end());
+                let (reference_beginning, reference_end) = (Location::from(psp_directory.contents_beginning()), Location::from(psp_directory.contents_end()));
                 let intersection_beginning = beginning.max(reference_beginning);
                 let intersection_end = end.min(reference_end);
                 if intersection_beginning < intersection_end {
@@ -606,7 +618,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
             if intersection_beginning < intersection_end {
                 return Err(Error::Overlap);
             }
-            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bhd_directory.contents_beginning(), bhd_directory.contents_end());
+            let (reference_beginning, reference_end) = (Location::from(bhd_directory.contents_beginning()), Location::from(bhd_directory.contents_end()));
             let intersection_beginning = beginning.max(reference_beginning);
             let intersection_end = end.min(reference_end);
             if intersection_beginning < intersection_end {
@@ -632,10 +644,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
 
     /// Note: BEGINNING, END are coordinates (in Byte).
     /// Note: We always create the directory and the contents adjacent, with gap in order to allow creating new directory entries when there are already contents.
-    pub fn create_bhd_directory(&mut self, beginning: Location, end: Location) -> Result<BhdDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
-        if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
-            return Err(Error::Misaligned);
-        }
+    pub fn create_bhd_directory(&mut self, beginning: ErasableLocation<ERASURE_BLOCK_SIZE>, end: ErasableLocation<ERASURE_BLOCK_SIZE>) -> Result<BhdDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
         match self.bhd_directories() {
             Ok(items) => {
                 for directory in items {
@@ -646,12 +655,12 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                 return Err(e);
             },
         }
-        self.ensure_no_overlap(beginning, end)?;
+        self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
         if self.efh.compatible_with_processor_generation(ProcessorGeneration::Milan) {
-            self.efh.bhd_directory_table_milan.set(beginning);
+            self.efh.bhd_directory_table_milan.set(beginning.into());
             // FIXME: ensure that the others are unset?
         } else {
-            self.efh.bhd_directory_tables[2].set(beginning);
+            self.efh.bhd_directory_tables[2].set(beginning.into());
             // FIXME: ensure that the others are unset?
         }
         self.write_efh()?;
@@ -660,10 +669,7 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
-    pub fn create_psp_directory(&mut self, beginning: Location, end: Location) -> Result<PspDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
-        if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
-            return Err(Error::Misaligned);
-        }
+    pub fn create_psp_directory(&mut self, beginning: ErasableLocation<ERASURE_BLOCK_SIZE>, end: ErasableLocation<ERASURE_BLOCK_SIZE>) -> Result<PspDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
         match self.psp_directory() {
             Err(Error::PspDirectoryHeaderNotFound) => {
             },
@@ -675,9 +681,9 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                 return Err(Error::Duplicate);
             }
         }
-        self.ensure_no_overlap(beginning, end)?;
+        self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
         // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.  Then, also psp_directory_table_location_naples should be set, instead.
-        self.efh.psp_directory_table_location_zen.set(beginning);
+        self.efh.psp_directory_table_location_zen.set(beginning.into());
         self.write_efh()?;
         let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
         Ok(result)
