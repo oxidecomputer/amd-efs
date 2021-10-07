@@ -122,6 +122,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     /// Updates the main header checksum.  Also updates total_entries (in the same header) to TOTAL_ENTRIES.
     /// Precondition: Since the checksum is over the entire directory, that means that all the directory entries needs to be correct already.
     fn update_main_header(&mut self, total_entries: u32) -> Result<()> {
+        let old_total_entries = self.header.total_entries();
         let flash_input_block_size = Self::minimal_directory_headers_size(total_entries)?;
         let mut flash_input_block_address: Location = self.location.into();
         let mut buf = [0xFFu8; ERASABLE_BLOCK_SIZE];
@@ -155,15 +156,22 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         // Write main header--and at least the directory entries that are "in the way"
         match header_from_collection_mut::<MainHeader>(&mut buf[..size_of::<MainHeader>()]) {
             Some(item) => {
-                self.header.set_total_entries(total_entries); // TODO: revert on error
+                self.header.set_total_entries(total_entries); // Note: reverted on error--see below
                 *item = self.header;
             },
             None => {
                 return Err(Error::DirectoryRangeCheck);
             },
         }
-        self.storage.erase_and_write_block(flash_input_block_address, &buf)?;
-        Ok(())
+        match self.storage.erase_and_write_block(flash_input_block_address, &buf) {
+            Ok(()) => {
+                Ok(())
+            },
+            Err(e) => {
+                self.header.set_total_entries(old_total_entries);
+                Err(Error::from(e))
+            },
+        }
     }
     fn directory_beginning(&self) -> Location {
         let additional_info = self.header.additional_info();
