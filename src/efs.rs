@@ -216,7 +216,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             match entry.source() {
                 ValueOrLocation::Location(x) => {
                     if x >= contents_beginning && x + size <= contents_end {
-                        frontier = x + size; // FIXME bounds check
+                        let new_frontier = x + size; // FIXME bounds check
+                        if new_frontier > frontier {
+                            frontier = new_frontier;
+                        }
                     }
                 },
                 _ => {
