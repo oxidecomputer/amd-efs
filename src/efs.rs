@@ -308,7 +308,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 return Err(Error::DirectoryPayloadRangeCheck);
             }
             remaining_size = remaining_size.checked_sub(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
-            self.storage.erase_and_write_block(payload_position, &buf);
+            self.storage.erase_and_write_block(payload_position, &buf)?;
             payload_position = end as Location;
             if count < buf.len() {
                 break;
@@ -322,8 +322,8 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     }
 }
 
-pub type PspDirectory<'a, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, 0x3000, ERASURE_BLOCK_SIZE>;
-pub type BhdDirectory<'a, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, 0x1000, ERASURE_BLOCK_SIZE>;
+pub type PspDirectory<'a, T, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, 0x3000, ERASURE_BLOCK_SIZE>;
+pub type BhdDirectory<'a, T, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, 0x1000, ERASURE_BLOCK_SIZE>;
 
 impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     // FIXME: Type-check
