@@ -122,14 +122,15 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     /// Updates the main header checksum.  Also updates total_entries (in the same header) to TOTAL_ENTRIES.
     /// Precondition: Since the checksum is over the entire directory, that means that all the directory entries needs to be correct already.
     fn update_main_header(&mut self, total_entries: u32) -> Result<()> {
-        self.header.set_total_entries(total_entries); // TODO: revert on error
         let flash_input_block_size = Self::minimal_directory_headers_size(total_entries)?;
         let mut flash_input_block_address: Location = self.location.into();
         let mut buf = [0xFFu8; ERASABLE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
         // Good luck with that: assert!(((flash_input_block_size as usize) % ERASABLE_BLOCK_SIZE) == 0);
-        let mut skip: usize = 8; // Skip fields "signature" and "checksum"
+        let mut skip: usize = 12; // Skip fields "signature", "checksum" and "total_entries"
+        // Note: total_entries on the flash has not been updated yet--so manually account for it.
+        checksummer.update(&[(total_entries & 0xffff) as u16, (total_entries >> 16) as u16]);
         while flash_input_block_remainder > 0 {
             self.storage.read_exact(flash_input_block_address, &mut buf)?;
             let mut count = ERASABLE_BLOCK_SIZE as u32;
@@ -154,6 +155,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         // Write main header--and at least the directory entries that are "in the way"
         match header_from_collection_mut::<MainHeader>(&mut buf[..size_of::<MainHeader>()]) {
             Some(item) => {
+                self.header.set_total_entries(total_entries); // TODO: revert on error
                 *item = self.header;
             },
             None => {
