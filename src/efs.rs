@@ -125,7 +125,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         self.header.set_total_entries(total_entries); // TODO: revert on error
         let flash_input_block_size = Self::minimal_directory_headers_size(total_entries)?;
         let mut flash_input_block_address: Location = self.location.into();
-        let mut buf = [0xFF; ERASABLE_BLOCK_SIZE];
+        let mut buf = [0xFFu8; ERASABLE_BLOCK_SIZE];
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
         // Good luck with that: assert!(((flash_input_block_size as usize) % ERASABLE_BLOCK_SIZE) == 0);
