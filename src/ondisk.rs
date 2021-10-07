@@ -32,7 +32,6 @@ pub fn header_from_collection<'a, T: Sized + FromBytes>(buf: &'a [u8]) -> Option
     }
 }
 
-type LU16 = U16<LittleEndian>;
 type LU32 = U32<LittleEndian>;
 type LU64 = U64<LittleEndian>;
 
