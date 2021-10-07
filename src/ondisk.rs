@@ -8,7 +8,7 @@ use amd_flash::Location;
 use crate::types::ValueOrLocation;
 use crate::types::Error;
 use crate::types::Result;
-use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32, U64};
+use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
