@@ -472,6 +472,7 @@ impl Default for PspDirectoryEntry {
 pub trait DirectoryEntry {
     fn source(&self) -> ValueOrLocation;
     fn size(&self) -> Option<u32>;
+    fn set_source(&mut self, value: ValueOrLocation) -> Result<()>;
 }
 
 impl PspDirectoryEntry {
@@ -517,6 +518,26 @@ impl DirectoryEntry for PspDirectoryEntry {
             ValueOrLocation::Location(source)
         };
         source
+    }
+    fn set_source(&mut self, value: ValueOrLocation) -> Result<()> {
+        match value {
+            ValueOrLocation::Value(v) => {
+                if self.size.get() == Self::SIZE_VALUE_MARKER {
+                    self.source.set(v);
+                    Ok(())
+                } else {
+                    Err(Error::PspDirectoryEntryTypeMismatch)
+                }
+            },
+            ValueOrLocation::Location(v) => {
+                if self.size.get() == Self::SIZE_VALUE_MARKER {
+                    Err(Error::PspDirectoryEntryTypeMismatch)
+                } else {
+                    self.source.set(v);
+                    Ok(())
+                }
+            },
+        }
     }
     fn size(&self) -> Option<u32> {
         let size = self.size.get();
@@ -767,6 +788,26 @@ impl DirectoryEntry for BiosDirectoryEntry {
             ValueOrLocation::Location(source)
         };
         source
+    }
+    fn set_source(&mut self, value: ValueOrLocation) -> Result<()> {
+        match value {
+            ValueOrLocation::Value(v) => {
+                if self.size.get() == Self::SIZE_VALUE_MARKER {
+                    self.source.set(v);
+                    Ok(())
+                } else {
+                    Err(Error::BiosDirectoryEntryTypeMismatch)
+                }
+            },
+            ValueOrLocation::Location(v) => {
+                if self.size.get() == Self::SIZE_VALUE_MARKER {
+                    Err(Error::BiosDirectoryEntryTypeMismatch)
+                } else {
+                    self.source.set(v);
+                    Ok(())
+                }
+            },
+        }
     }
 
     fn size(&self) -> Option<u32> {
