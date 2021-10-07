@@ -51,7 +51,7 @@ pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<ERASURE_BLOCK
     _item: PhantomData<Item>,
 }
 
-impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: Copy + FromBytes + AsBytes + DirectoryEntry, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: Copy + FromBytes + AsBytes + DirectoryEntry + std::fmt::Debug, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
     const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but good luck with modifying the first entry payload then.
     const MAX_DIRECTORY_ENTRIES: usize = ((Self::MAX_DIRECTORY_HEADERS_SIZE as usize) - size_of::<MainHeader>()) / size_of::<Item>();
@@ -203,7 +203,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
 
-    pub(crate) fn find_payload_empty_slot(&self, size: u32) -> Result<(Location, Location)> {
+    pub(crate) fn find_payload_empty_slot(&self, size: u32) -> Result<Location> {
         let mut entries = self.entries();
         let contents_beginning = self.contents_beginning() as u64;
         let contents_end = self.contents_end() as u64;
@@ -216,6 +216,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             match entry.source() {
                 ValueOrLocation::Location(x) => {
                     if x >= contents_beginning && x + size <= contents_end {
+
                         let new_frontier = x + size; // FIXME bounds check
                         if new_frontier > frontier {
                             frontier = new_frontier;
@@ -228,12 +229,8 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
         let frontier: Location = frontier.try_into().map_err(|_| Error::DirectoryPayloadRangeCheck)?;
         let frontier_end = frontier.checked_add(size).ok_or(Error::DirectoryPayloadRangeCheck)?;
-        let (beginning, end) = T::grow_to_erasure_block(frontier, frontier_end);
-        if (end as u64) <= contents_end {
-            Ok((beginning, end))
-        } else {
-            Err(Error::DirectoryPayloadRangeCheck)
-        }
+        let (_, frontier) = T::grow_to_erasure_block(frontier, frontier);
+        Ok(frontier)
     }
 
     pub(crate) fn write_directory_entry(&mut self, directory_entry_position: Location, entry: &Item) -> Result<()> {
@@ -266,7 +263,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     if size == 0 {
                         result = None
                     } else {
-                        let (beginning, end) = self.find_payload_empty_slot(size)?;
+                        let beginning = self.find_payload_empty_slot(size)?;
                         result = Some(beginning)
                     }
                 }
