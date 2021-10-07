@@ -151,7 +151,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let checksum = checksummer.value().value();
         self.header.set_checksum(checksum);
         let flash_input_block_address = ErasableLocation::<ERASABLE_BLOCK_SIZE>::try_from(self.location)?;
-        self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
+        self.storage.read_erasable_block(flash_input_block_address, &mut buf)?;
         // Write main header--and at least the directory entries that are "in the way"
         match header_from_collection_mut::<MainHeader>(&mut buf[..size_of::<MainHeader>()]) {
             Some(item) => {
@@ -238,7 +238,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
         let frontier: Location = frontier.try_into().map_err(|_| Error::DirectoryPayloadRangeCheck)?;
         let frontier_end = frontier.checked_add(size).ok_or(Error::DirectoryPayloadRangeCheck)?;
-        let (_, frontier) = T::grow_to_erasure_block(frontier, frontier);
+        let (_, frontier) = T::grow_to_erasable_block(frontier, frontier);
         Ok(frontier.try_into()?)
     }
 
@@ -247,7 +247,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let buf_index = (directory_entry_position as usize) % ERASABLE_BLOCK_SIZE;
         let beginning = directory_entry_position - (buf_index as Location); // align
         let beginning = beginning.try_into().map_err(|_| Error::Misaligned)?;
-        self.storage.read_erasure_block(beginning, &mut buf)?;
+        self.storage.read_erasable_block(beginning, &mut buf)?;
         // FIXME: what if this straddles two different blocks?
         match header_from_collection_mut::<Item>(&mut buf[buf_index..buf_index + size_of::<Item>()]) {
             Some(item) => {
@@ -482,7 +482,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
     pub fn load(storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
         let efh_beginning = Self::embedded_firmware_header_beginning(&storage, processor_generation)?;
         let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
-        storage.read_erasure_block(efh_beginning, &mut xbuf)?;
+        storage.read_erasable_block(efh_beginning, &mut xbuf)?;
         let efh = header_from_collection::<Efh>(&xbuf[..]).ok_or_else(|| Error::EfsHeaderNotFound)?;
         if efh.signature.get() != 0x55aa_55aa {
             return Err(Error::EfsHeaderNotFound);
@@ -587,11 +587,11 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
 
     // Make sure there's no overlap (even when rounded to entire erasure blocks)
     fn ensure_no_overlap(&self, beginning: Location, end: Location) -> Result<()> {
-        let (beginning, end) = T::grow_to_erasure_block(beginning, end);
+        let (beginning, end) = T::grow_to_erasable_block(beginning, end);
         // FIXME: check EFH no-overlap!
         match self.psp_directory() {
             Ok(psp_directory) => {
-                let (reference_beginning, reference_end) = T::grow_to_erasure_block(psp_directory.directory_beginning(), psp_directory.directory_end());
+                let (reference_beginning, reference_end) = T::grow_to_erasable_block(psp_directory.directory_beginning(), psp_directory.directory_end());
                 let intersection_beginning = beginning.max(reference_beginning);
                 let intersection_end = end.min(reference_end);
                 if intersection_beginning < intersection_end {
@@ -612,7 +612,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         }
         let bhd_directories = self.bhd_directories()?;
         for bhd_directory in bhd_directories {
-            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bhd_directory.directory_beginning(), bhd_directory.directory_end());
+            let (reference_beginning, reference_end) = T::grow_to_erasable_block(bhd_directory.directory_beginning(), bhd_directory.directory_end());
             let intersection_beginning = beginning.max(reference_beginning);
             let intersection_end = end.min(reference_end);
             if intersection_beginning < intersection_end {
