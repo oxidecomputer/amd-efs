@@ -1,4 +1,6 @@
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
 mod amdfletcher32;
 mod efs;
 mod ondisk;
