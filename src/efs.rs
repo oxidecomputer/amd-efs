@@ -249,26 +249,34 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Option<Location>> {
         let total_entries = self.header.total_entries().checked_add(1).ok_or(Error::DirectoryRangeCheck)?;
         if Self::minimal_directory_headers_size(total_entries)? <= self.directory_headers_size { // there's still space for the directory entry
+            let result: Option<Location>;
             match entry.size() {
                 None => {
                     self.header.set_total_entries(total_entries);
                     self.update_main_header_checksum()?;
-                    Ok(None)
+                    result = None
                 },
                 Some(size) => { // has payload
                     if size == 0 {
-                        Ok(None)
+                        result = None
                     } else {
                         let (beginning, end) = self.find_payload_empty_slot(size)?;
-                        self.header.set_total_entries(total_entries);
-                        let mut entry = *entry;
-                        entry.set_source(ValueOrLocation::Location(beginning.into()));
-                        self.write_directory_entry(self.directory_beginning() + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
-                        self.update_main_header_checksum()?;
-                        Ok(Some(beginning))
+                        self.header.set_total_entries(total_entries); // FIXME error handling
+                        result = Some(beginning)
                     }
                 }
             }
+            let mut entry = *entry;
+            match result {
+                None => {
+                },
+                Some(beginning) => {
+                    entry.set_source(ValueOrLocation::Location(beginning.into()));
+                }
+            }
+            self.write_directory_entry(self.directory_beginning() + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
+            self.update_main_header_checksum()?;
+            Ok(result)
         } else {
             Err(Error::DirectoryRangeCheck)
         }
