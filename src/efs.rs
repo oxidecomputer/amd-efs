@@ -127,6 +127,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let mut flash_input_block_remainder = flash_input_block_size;
         let mut checksummer = AmdFletcher32::new();
         // Good luck with that: assert!(((flash_input_block_size as usize) % ERASURE_BLOCK_SIZE) == 0);
+        let mut skip: usize = checksum_input_skip_at_the_beginning as usize;
         while flash_input_block_remainder > 0 {
             self.storage.read_erasure_block(flash_input_block_address, &mut buf)?;
             let mut count = ERASURE_BLOCK_SIZE as u32;
@@ -134,7 +135,9 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 count = flash_input_block_remainder;
             }
             assert!(count % 2 == 0);
-            let block = &buf[..count as usize].chunks(2).map(|bytes| { u16::from_le_bytes(bytes.try_into().unwrap()) });
+            assert!(count >= 8);
+            let block = &buf[skip..count as usize].chunks(2).map(|bytes| { u16::from_le_bytes(bytes.try_into().unwrap()) });
+            skip = 0;
             // TODO: Optimize performance
             block.clone().for_each(|item: u16|
                 checksummer.update(&[item]));
