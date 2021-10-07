@@ -118,7 +118,9 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             },
         }
     }
-    fn update_main_header_checksum(&mut self) -> Result<()> {
+    /// Updates the main header checksum.  Also updates total_entries (in the same header) to TOTAL_ENTRIES.
+    fn update_main_header_checksum(&mut self, total_entries: u32) -> Result<()> {
+        self.header.set_total_entries(total_entries); // TODO: revert on error
         let checksum_input_skip_at_the_beginning: u32 = 8; // Fields "signature" and "checksum"
         let flash_input_block_size = Self::minimal_directory_headers_size(self.header.total_entries())?;
         let checksum_input_size = flash_input_block_size.checked_sub(checksum_input_skip_at_the_beginning).ok_or(Error::DirectoryRangeCheck)?;
@@ -255,8 +257,6 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             let result: Option<Location>;
             match entry.size() {
                 None => {
-                    self.header.set_total_entries(total_entries);
-                    self.update_main_header_checksum()?;
                     result = None
                 },
                 Some(size) => { // has payload
@@ -264,7 +264,6 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                         result = None
                     } else {
                         let (beginning, end) = self.find_payload_empty_slot(size)?;
-                        self.header.set_total_entries(total_entries); // FIXME error handling
                         result = Some(beginning)
                     }
                 }
@@ -278,7 +277,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 }
             }
             self.write_directory_entry(self.location + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
-            self.update_main_header_checksum()?;
+            self.update_main_header_checksum(total_entries)?;
             Ok(result)
         } else {
             Err(Error::DirectoryRangeCheck)
