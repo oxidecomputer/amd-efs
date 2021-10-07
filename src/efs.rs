@@ -1,6 +1,6 @@
 use amd_flash::{FlashRead, FlashWrite, Location};
 use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
-use crate::ondisk::{BiosDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BiosDirectoryEntry, BiosDirectoryEntryAttrs, BiosDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry};
+use crate::ondisk::{BhdDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BhdDirectoryEntry, BhdDirectoryEntryAttrs, BhdDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
@@ -323,7 +323,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
 }
 
 pub type PspDirectory<'a, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, 0x3000, ERASURE_BLOCK_SIZE>;
-pub type BiosDirectory<'a, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, 0x1000, ERASURE_BLOCK_SIZE>;
+pub type BhdDirectory<'a, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> = Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, 0x1000, ERASURE_BLOCK_SIZE>;
 
 impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     // FIXME: Type-check
@@ -355,25 +355,25 @@ impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>,
     }
 }
 
-impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, BiosDirectoryHeader, BiosDirectoryEntry, T, BiosDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
-    pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<Location>> {
-        self.add_entry(payload_position, &BiosDirectoryEntry::new_payload(attrs, size, 0, Some(destination_location))?)
+impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+    pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<Location>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<Location>> {
+        self.add_entry(payload_position, &BhdDirectoryEntry::new_payload(attrs, size, 0, Some(destination_location))?)
     }
 
-    pub fn add_apob_entry(&mut self, payload_position: Option<Location>, type_: BiosDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
-        let attrs = BiosDirectoryEntryAttrs::new().with_type_(type_);
+    pub fn add_apob_entry(&mut self, payload_position: Option<Location>, type_: BhdDirectoryEntryType, ram_destination_address: u64) -> Result<()> {
+        let attrs = BhdDirectoryEntryAttrs::new().with_type_(type_);
         match self.add_entry_with_destination(payload_position, &attrs, 0, ram_destination_address)? {
             None => {
                 Ok(())
             },
             _ => {
-                Err(Error::BiosDirectoryEntryTypeMismatch)
+                Err(Error::BhdDirectoryEntryTypeMismatch)
             }
         }
     }
 
-    pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &BiosDirectoryEntryAttrs, size: u32, destination_location: Option<u64>, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
-        let xpayload_position = self.add_entry(payload_position, &BiosDirectoryEntry::new_payload(attrs, size, match payload_position {
+    pub fn add_blob_entry(&mut self, payload_position: Option<Location>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: Option<u64>, iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<Location> {
+        let xpayload_position = self.add_entry(payload_position, &BhdDirectoryEntry::new_payload(attrs, size, match payload_position {
             None => 0,
             Some(x) => x
         }, destination_location)?)?;
@@ -389,20 +389,20 @@ impl<'a, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>,
     }
 }
 
-pub struct EfhBiosIterator<'a, T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> {
+pub struct EfhBhdsIterator<'a, T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
     positions: [u32; 4], // 0xffff_ffff: invalid
     index_into_positions: usize,
 }
 
-impl<'a, T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> Iterator for EfhBiosIterator<'a, T, ERASURE_BLOCK_SIZE> {
-   type Item = BiosDirectory<'a, T, ERASURE_BLOCK_SIZE>;
+impl<'a, T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> Iterator for EfhBhdsIterator<'a, T, ERASURE_BLOCK_SIZE> {
+   type Item = BhdDirectory<'a, T, ERASURE_BLOCK_SIZE>;
    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
        while self.index_into_positions < self.positions.len() {
            let position = self.positions[self.index_into_positions];
            self.index_into_positions += 1;
            if position != 0xffff_ffff && position != 0 /* sigh.  Some images have 0 as "invalid" mark */ {
-               match BiosDirectory::load(self.storage, position) {
+               match BhdDirectory::load(self.storage, position) {
                    Ok(e) => {
                        return Some(e);
                    },
@@ -561,10 +561,10 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
     }
 
     /// Returns an iterator over level 1 BIOS directories
-    pub fn bios_directories(&self) -> Result<EfhBiosIterator<T, ERASURE_BLOCK_SIZE>> {
+    pub fn bhd_directories(&self) -> Result<EfhBhdsIterator<T, ERASURE_BLOCK_SIZE>> {
         let embedded_firmware_structure = &self.efh;
-        let positions = [embedded_firmware_structure.bios_directory_table_milan.get(), embedded_firmware_structure.bios_directory_tables[2].get() & 0x00ff_ffff, embedded_firmware_structure.bios_directory_tables[1].get() & 0x00ff_ffff, embedded_firmware_structure.bios_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
-        Ok(EfhBiosIterator {
+        let positions = [embedded_firmware_structure.bhd_directory_table_milan.get(), embedded_firmware_structure.bhd_directory_tables[2].get() & 0x00ff_ffff, embedded_firmware_structure.bhd_directory_tables[1].get() & 0x00ff_ffff, embedded_firmware_structure.bhd_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
+        Ok(EfhBhdsIterator {
             storage: &self.storage,
             positions: positions,
             index_into_positions: 0,
@@ -596,15 +596,15 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
                 return Err(e);
             },
         }
-        let bios_directories = self.bios_directories()?;
-        for bios_directory in bios_directories {
-            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.directory_beginning(), bios_directory.directory_end());
+        let bhd_directories = self.bhd_directories()?;
+        for bhd_directory in bhd_directories {
+            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bhd_directory.directory_beginning(), bhd_directory.directory_end());
             let intersection_beginning = beginning.max(reference_beginning);
             let intersection_end = end.min(reference_end);
             if intersection_beginning < intersection_end {
                 return Err(Error::Overlap);
             }
-            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bios_directory.contents_beginning(), bios_directory.contents_end());
+            let (reference_beginning, reference_end) = T::grow_to_erasure_block(bhd_directory.contents_beginning(), bhd_directory.contents_end());
             let intersection_beginning = beginning.max(reference_beginning);
             let intersection_end = end.min(reference_end);
             if intersection_beginning < intersection_end {
@@ -630,11 +630,11 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
 
     /// Note: BEGINNING, END are coordinates (in Byte).
     /// Note: We always create the directory and the contents adjacent without gap.
-    pub fn create_bios_directory(&mut self, beginning: Location, end: Location) -> Result<BiosDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
+    pub fn create_bhd_directory(&mut self, beginning: Location, end: Location) -> Result<BhdDirectory<'_, T, ERASURE_BLOCK_SIZE>> {
         if T::grow_to_erasure_block(beginning, end) != (beginning, end) {
             return Err(Error::Misaligned);
         }
-        match self.bios_directories() {
+        match self.bhd_directories() {
             Ok(items) => {
                 for directory in items {
                     // TODO: Ensure that we don't have too many similar ones
@@ -646,14 +646,14 @@ impl<T: FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, const ER
         }
         self.ensure_no_overlap(beginning, end)?;
         if self.efh.compatible_with_processor_generation(ProcessorGeneration::Milan) {
-            self.efh.bios_directory_table_milan.set(beginning);
+            self.efh.bhd_directory_table_milan.set(beginning);
             // FIXME: ensure that the others are unset?
         } else {
-            self.efh.bios_directory_tables[2].set(beginning);
+            self.efh.bhd_directory_tables[2].set(beginning);
             // FIXME: ensure that the others are unset?
         }
         self.write_efh()?;
-        let result = BiosDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
+        let result = BhdDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
         Ok(result)
     }
 

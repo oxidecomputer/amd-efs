@@ -105,9 +105,9 @@ pub struct Efh {
     pub psp_directory_table_location_naples: LU32, // usually unused
     pub psp_directory_table_location_zen: LU32,
     /// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BIOS_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BIOS_DIRECTORY_TABLE_MILAN instead.
-    pub bios_directory_tables: [LU32; 3],
+    pub bhd_directory_tables: [LU32; 3],
     pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
-    pub bios_directory_table_milan: LU32, // or Combo
+    pub bhd_directory_table_milan: LU32, // or Combo
     _padding: LU32,
     pub promontory_firmware_location: LU32,
     pub low_power_promontory_firmware_location: LU32,
@@ -127,9 +127,9 @@ impl Default for Efh {
             xhci_fw_location: 0.into(),
             psp_directory_table_location_naples: 0.into(),
             psp_directory_table_location_zen: 0.into(), // probably invalid
-            bios_directory_tables: [0.into(); 3], // probably invalid
+            bhd_directory_tables: [0.into(); 3], // probably invalid
             second_gen_efs: 0xffff_fffe.into(),
-            bios_directory_table_milan: 0xffff_ffff.into(),
+            bhd_directory_table_milan: 0xffff_ffff.into(),
             _padding: 0xffff_ffff.into(),
             promontory_firmware_location: 0xffff_ffff.into(),
             low_power_promontory_firmware_location: 0xffff_ffff.into(),
@@ -370,7 +370,7 @@ pub enum PspDirectoryEntryType {
     ExternalChipsetPspBootloader46 = 0x46,
     DrtmTa = 0x47,
     L2aPspDirectory = 0x48,
-    L2BiosDirectory = 0x49,
+    L2BhdDirectory = 0x49,
     L2bPspDirectory = 0x4A,
     ExternalChipsetSecurityPolicyBinary = 0x4C,
     ExternalChipsetSecureDebugUnlockBinary = 0x4D,
@@ -565,14 +565,14 @@ impl core::fmt::Debug for PspDirectoryEntry {
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
-pub struct BiosDirectoryHeader {
+pub struct BhdDirectoryHeader {
     pub(crate) cookie: [u8; 4], // b"$BHD" or b"$BL2"
     pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
     pub(crate) total_entries: LU32,
     pub(crate) additional_info: LU32,
 }
 
-impl DirectoryHeader for BiosDirectoryHeader {
+impl DirectoryHeader for BhdDirectoryHeader {
     fn cookie(&self) -> [u8; 4] {
         self.cookie
     }
@@ -599,7 +599,7 @@ impl DirectoryHeader for BiosDirectoryHeader {
     }
 }
 
-impl Default for BiosDirectoryHeader {
+impl Default for BhdDirectoryHeader {
     fn default() -> Self {
         Self {
             cookie: *b"    ", // invalid
@@ -610,12 +610,12 @@ impl Default for BiosDirectoryHeader {
     }
 }
 
-impl core::fmt::Debug for BiosDirectoryHeader {
+impl core::fmt::Debug for BhdDirectoryHeader {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let checksum = self.checksum.get();
         let total_entries = self.total_entries.get();
         let additional_info = DirectoryAdditionalInfo::from(self.additional_info.get());
-        fmt.debug_struct("BiosDirectoryHeader")
+        fmt.debug_struct("BhdDirectoryHeader")
            .field("cookie", &self.cookie)
            .field("checksum", &checksum)
            .field("total_entries", &total_entries)
@@ -627,7 +627,7 @@ impl core::fmt::Debug for BiosDirectoryHeader {
 #[repr(u8)]
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
 #[bits = 8]
-pub enum BiosDirectoryEntryType {
+pub enum BhdDirectoryEntryType {
     OemPublicKey = 0x05,
     CryptographicSignature = 0x07,
     Apcb = 0x60,
@@ -643,12 +643,12 @@ pub enum BiosDirectoryEntryType {
     Mp2FirmwareConfiguration = 0x6A,
     CorebootVbootWorkbuffer = 0x6B, // main memory shared between PSP and x86
     MpmConfiguration = 0x6C,
-    SecondLevelDirectory = 0x70, // also a BiosDirectory
+    SecondLevelDirectory = 0x70, // also a BhdDirectory
 }
 
 #[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier)]
 #[bits = 8]
-pub enum BiosDirectoryEntryRegionType {
+pub enum BhdDirectoryEntryRegionType {
     Normal = 0,
     Ta1 = 1,
     Ta2 = 2,
@@ -657,11 +657,11 @@ pub enum BiosDirectoryEntryRegionType {
 #[bitfield(bits = 32)]
 #[repr(u32)]
 #[derive(Copy, Clone, Debug)]
-pub struct BiosDirectoryEntryAttrs {
+pub struct BhdDirectoryEntryAttrs {
     #[bits = 8]
-    pub type_: BiosDirectoryEntryType,
+    pub type_: BhdDirectoryEntryType,
     #[bits = 8]
-    pub region_type: BiosDirectoryEntryRegionType,
+    pub region_type: BhdDirectoryEntryRegionType,
     pub reset_image: bool,
     pub copy_image: bool,
     pub read_only: bool, // only useful for region_type > 0
@@ -674,14 +674,14 @@ pub struct BiosDirectoryEntryAttrs {
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 #[repr(C, packed)]
-pub struct BiosDirectoryEntry {
+pub struct BhdDirectoryEntry {
     pub attrs: LU32,
     size: LU32, // 0xFFFF_FFFF for value entry
     source: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
     pub destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
 }
 
-impl Default for BiosDirectoryEntry {
+impl Default for BhdDirectoryEntry {
     fn default() -> Self {
         Self {
             attrs: 0.into(),
@@ -692,51 +692,51 @@ impl Default for BiosDirectoryEntry {
     }
 }
 
-impl BiosDirectoryEntry {
+impl BhdDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     const DESTINATION_NONE_MARKER: u64 = 0xffff_ffff_ffff_ffff;
-    pub fn type_(&self) -> BiosDirectoryEntryType {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+    pub fn type_(&self) -> BhdDirectoryEntryType {
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.type_()
     }
 
-    pub fn region_type(&self) -> BiosDirectoryEntryRegionType {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+    pub fn region_type(&self) -> BhdDirectoryEntryRegionType {
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.region_type()
     }
 
     pub fn reset_image(&self) -> bool {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.reset_image()
     }
 
     pub fn copy_image(&self) -> bool {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.copy_image()
     }
 
     pub fn read_only(&self) -> bool {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.read_only()
     }
 
     pub fn compressed(&self) -> bool {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.compressed()
     }
 
     pub fn instance(&self) -> u8 {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.instance()
     }
 
     pub fn sub_program(&self) -> u8 {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.sub_program()
     }
 
     pub fn rom_id(&self) -> u8 {
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.rom_id()
     }
 
@@ -748,7 +748,7 @@ impl BiosDirectoryEntry {
             Some(destination_location)
         }
     }
-    pub fn new_value(attrs: &BiosDirectoryEntryAttrs, value: u64) -> Self {
+    pub fn new_value(attrs: &BhdDirectoryEntryAttrs, value: u64) -> Self {
         Self {
             attrs: u32::from(*attrs).into(),
             size: Self::SIZE_VALUE_MARKER.into(),
@@ -756,9 +756,9 @@ impl BiosDirectoryEntry {
             destination_location: Self::DESTINATION_NONE_MARKER.into(),
         }
     }
-    pub fn new_payload(attrs: &BiosDirectoryEntryAttrs, size: u32, source: Location, destination_location: Option<u64>) -> Result<Self> {
+    pub fn new_payload(attrs: &BhdDirectoryEntryAttrs, size: u32, source: Location, destination_location: Option<u64>) -> Result<Self> {
         if size == Self::SIZE_VALUE_MARKER {
-            Err(Error::BiosDirectoryEntryTypeMismatch)
+            Err(Error::BhdDirectoryEntryTypeMismatch)
         } else {
             Ok(Self {
                 attrs: u32::from(*attrs).into(),
@@ -768,7 +768,7 @@ impl BiosDirectoryEntry {
                     None => Self::DESTINATION_NONE_MARKER,
                     Some(x) => {
                         if x == Self::DESTINATION_NONE_MARKER {
-                            return Err(Error::BiosDirectoryEntryTypeMismatch);
+                            return Err(Error::BhdDirectoryEntryTypeMismatch);
                         }
                         x
                     },
@@ -778,7 +778,7 @@ impl BiosDirectoryEntry {
     }
 }
 
-impl DirectoryEntry for BiosDirectoryEntry {
+impl DirectoryEntry for BhdDirectoryEntry {
     fn source(&self) -> ValueOrLocation {
         let size = self.size.get();
         let source = self.source.get();
@@ -796,12 +796,12 @@ impl DirectoryEntry for BiosDirectoryEntry {
                     self.source.set(v);
                     Ok(())
                 } else {
-                    Err(Error::BiosDirectoryEntryTypeMismatch)
+                    Err(Error::BhdDirectoryEntryTypeMismatch)
                 }
             },
             ValueOrLocation::Location(v) => {
                 if self.size.get() == Self::SIZE_VALUE_MARKER {
-                    Err(Error::BiosDirectoryEntryTypeMismatch)
+                    Err(Error::BhdDirectoryEntryTypeMismatch)
                 } else {
                     self.source.set(v);
                     Ok(())
@@ -820,13 +820,13 @@ impl DirectoryEntry for BiosDirectoryEntry {
     }
 }
 
-impl core::fmt::Debug for BiosDirectoryEntry {
+impl core::fmt::Debug for BhdDirectoryEntry {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let source = self.source();
         let destination_location = self.destination_location();
-        let attrs = BiosDirectoryEntryAttrs::from(self.attrs.get());
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         let size = self.size();
-        fmt.debug_struct("BiosDirectoryEntry")
+        fmt.debug_struct("BhdDirectoryEntry")
            .field("attrs", &attrs)
            .field("size", &size)
            .field("source", &source)
@@ -847,8 +847,8 @@ mod tests {
         assert!(size_of::<Efh>() < 0x100);
         assert!(size_of::<PspDirectoryHeader>() == 16);
         assert!(size_of::<PspDirectoryEntry>() == 16);
-        assert!(size_of::<BiosDirectoryHeader>() == 16);
-        assert!(size_of::<BiosDirectoryEntry>() == 24);
+        assert!(size_of::<BhdDirectoryHeader>() == 16);
+        assert!(size_of::<BhdDirectoryEntry>() == 24);
     }
 
     #[test]
