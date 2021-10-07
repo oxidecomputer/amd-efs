@@ -16,7 +16,7 @@ use zerocopy::AsBytes;
 
 pub struct DirectoryIter<'a, Item, T: FlashRead<ERASURE_BLOCK_SIZE>, const ERASURE_BLOCK_SIZE: usize> {
     storage: &'a T,
-    beginning: Location, // current item (entry)
+    beginning: Location, // current item (directory entry)
     end: Location,
     total_entries: u32,
     index: u32,
@@ -51,7 +51,7 @@ pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<ERASURE_BLOCK
     _item: PhantomData<Item>,
 }
 
-impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: Copy + FromBytes + AsBytes + DirectoryEntry + std::fmt::Debug, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
+impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Item: Copy + FromBytes + AsBytes + DirectoryEntry + core::fmt::Debug, T: 'a + FlashRead<ERASURE_BLOCK_SIZE> + FlashWrite<ERASURE_BLOCK_SIZE>, Attrs: Sized, const SPI_BLOCK_SIZE: usize, const ERASURE_BLOCK_SIZE: usize> Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASURE_BLOCK_SIZE> {
     const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
     const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but then good luck with modifying the first entry payload without clobbering the directory that comes right before it.
     const MAX_DIRECTORY_ENTRIES: usize = ((Self::MAX_DIRECTORY_HEADERS_SIZE as usize) - size_of::<MainHeader>()) / size_of::<Item>();
