@@ -105,7 +105,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     return Err(Error::DirectoryRangeCheck);
                 }
                 let additional_info = DirectoryAdditionalInfo::new()
-                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit(ErasableLocation::<ERASABLE_BLOCK_SIZE>::distance_between(beginning, end).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
+                  .with_max_size_checked(DirectoryAdditionalInfo::try_into_unit(ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   .with_spi_block_size_checked(DirectoryAdditionalInfo::try_into_unit(Self::SPI_BLOCK_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?).map_err(|_| Error::DirectoryRangeCheck)?
                   // We put the actual payload at some distance from the directory, but still close-by--in order to be able to grow the directory later (when there's already payload)
                   .with_base_address(DirectoryAdditionalInfo::try_into_unit((Location::from(beginning).checked_add(Self::MAX_DIRECTORY_HEADERS_SIZE).ok_or_else(|| Error::DirectoryRangeCheck)?).try_into().map_err(|_| Error::DirectoryRangeCheck)?).ok_or_else(|| Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
