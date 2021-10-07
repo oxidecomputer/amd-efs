@@ -228,6 +228,22 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
 
+    pub(crate) fn write_directory_entry(&mut self, directory_entry_position: Location, entry: &Item) -> Result<()> {
+        let mut buf: [u8; ERASURE_BLOCK_SIZE] = [0xFF; ERASURE_BLOCK_SIZE];
+        let buf_index = (directory_entry_position as usize) % ERASURE_BLOCK_SIZE;
+        self.storage.read_erasure_block(directory_entry_position - (buf_index as Location), &mut buf)?;
+        // FIXME: what this straddles two different blocks?
+        match header_from_collection_mut::<Item>(&mut buf[buf_index..buf_index + size_of::<Item>()]) {
+            Some(item) => {
+                *item = *entry;
+                self.storage.erase_and_write_block(directory_entry_position - (buf_index as Location), &buf)?;
+            },
+            None => {
+                return Err(Error::DirectoryRangeCheck);
+            }
+        }
+        Ok(())
+    }
     /// ENTRY: The directory entry to put.  Note that we WILL set entry.source = payload_position in the copy we save on Flash.
     /// Result: Location where to put the payload.
     pub(crate) fn add_entry(&mut self, payload_position: Option<Location>, entry: &Item) -> Result<Option<Location>> {
@@ -244,9 +260,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                         Ok(None)
                     } else {
                         let (beginning, end) = self.find_payload_empty_slot(size)?;
-                        eprintln!("PAYLOAD EMPTY SLOT {}", beginning);
                         self.header.set_total_entries(total_entries);
-                        // FIXME: Add the actual directory entry; in there, fix up source!
+                        let mut entry = *entry;
+                        entry.set_source(ValueOrLocation::Location(beginning.into()));
+                        self.write_directory_entry(self.directory_beginning() + Self::minimal_directory_headers_size(self.header.total_entries())?, &entry)?; // FIXME check bounds
                         self.update_main_header_checksum()?;
                         Ok(Some(beginning))
                     }
