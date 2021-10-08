@@ -449,7 +449,7 @@ pub struct Efs<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZ
 
 impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> Efs<T, ERASABLE_BLOCK_SIZE> {
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again (I think it would be better to have the user just construct two different Efs instances in that case)
-    pub(crate) fn embedded_firmware_header_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
+    pub(crate) fn efh_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
         for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
             let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
             storage.read_exact(*position, &mut xbuf)?;
@@ -489,7 +489,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
     }
 
     pub fn load(storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
-        let efh_beginning = Self::embedded_firmware_header_beginning(&storage, processor_generation)?;
+        let efh_beginning = Self::efh_beginning(&storage, processor_generation)?;
         let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
         storage.read_erasable_block(efh_beginning, &mut xbuf)?;
         let efh = header_from_collection::<Efh>(&xbuf[..]).ok_or_else(|| Error::EfsHeaderNotFound)?;
@@ -585,8 +585,8 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
 
     /// Returns an iterator over level 1 BIOS directories
     pub fn bhd_directories(&self) -> Result<EfhBhdsIterator<T, ERASABLE_BLOCK_SIZE>> {
-        let embedded_firmware_structure = &self.efh;
-        let positions = [embedded_firmware_structure.bhd_directory_table_milan.get(), embedded_firmware_structure.bhd_directory_tables[2].get() & 0x00ff_ffff, embedded_firmware_structure.bhd_directory_tables[1].get() & 0x00ff_ffff, embedded_firmware_structure.bhd_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
+        let efh = &self.efh;
+        let positions = [efh.bhd_directory_table_milan.get(), efh.bhd_directory_tables[2].get() & 0x00ff_ffff, efh.bhd_directory_tables[1].get() & 0x00ff_ffff, efh.bhd_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
         Ok(EfhBhdsIterator {
             storage: &self.storage,
             positions: positions,
