@@ -331,9 +331,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             }
 
             let end = (Location::from(payload_position) as usize).checked_add(ERASABLE_BLOCK_SIZE).ok_or(Error::DirectoryPayloadRangeCheck)?;
-            if end > contents_end as usize {
-                return Err(Error::DirectoryPayloadRangeCheck);
-            }
+            // FIXME: This is disabled until we know what to do about reset images not liking to be directly inside directories.
+            //if end > contents_end as usize {
+            //    return Err(Error::DirectoryPayloadRangeCheck);
+            //}
             remaining_size = remaining_size.checked_sub(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
             self.storage.erase_and_write_block(payload_position, &buf)?;
             payload_position = payload_position.advance(ERASABLE_BLOCK_SIZE)?;
