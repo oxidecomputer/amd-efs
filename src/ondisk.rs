@@ -144,6 +144,7 @@ impl Default for Efh {
 #[repr(u8)]
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
 pub enum ProcessorGeneration {
+    Rome = 0, // FIXME: This is NOT supported by this crate.  A lot of things will check weird stuff.  You have been warned.
     Milan = 1,
 }
 
