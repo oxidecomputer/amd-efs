@@ -284,7 +284,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     if size == 0 {
                         result = None
                     } else {
-                        let beginning = self.find_payload_empty_slot(size)?;
+                        let beginning = match payload_position {
+                            Some(x) => x,
+                            None => self.find_payload_empty_slot(size)?,
+                        };
                         result = Some(beginning)
                     }
                 }
