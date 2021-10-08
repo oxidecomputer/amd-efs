@@ -1,5 +1,5 @@
 use amd_flash::{FlashRead, FlashWrite, Location, ErasableLocation};
-use crate::ondisk::EMBEDDED_FIRMWARE_STRUCTURE_POSITION;
+use crate::ondisk::EFH_POSITION;
 use crate::ondisk::{BhdDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BhdDirectoryEntry, BhdDirectoryEntryAttrs, BhdDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
@@ -450,7 +450,7 @@ pub struct Efs<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZ
 impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> Efs<T, ERASABLE_BLOCK_SIZE> {
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again (I think it would be better to have the user just construct two different Efs instances in that case)
     pub(crate) fn efh_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
-        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
+        for position in EFH_POSITION.iter() {
             let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
             storage.read_exact(*position, &mut xbuf)?;
             match header_from_collection::<Efh>(&xbuf[..]) {
@@ -468,7 +468,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
             }
         }
         // Old firmware header is better than no firmware header; TODO: Warn.
-        for position in EMBEDDED_FIRMWARE_STRUCTURE_POSITION.iter() {
+        for position in EFH_POSITION.iter() {
             let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
             storage.read_exact(*position, &mut xbuf)?;
             match header_from_collection::<Efh>(&xbuf[..]) {

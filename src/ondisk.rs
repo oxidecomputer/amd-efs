@@ -36,7 +36,7 @@ type LU32 = U32<LittleEndian>;
 type LU64 = U64<LittleEndian>;
 
 // The first one is recommended by AMD; the last one is always used in practice.
-pub const EMBEDDED_FIRMWARE_STRUCTURE_POSITION: [Location; 6] = [0xFA_0000, 0xF2_0000, 0xE2_0000, 0xC2_0000, 0x82_0000, 0x2_0000];
+pub const EFH_POSITION: [Location; 6] = [0xFA_0000, 0xF2_0000, 0xE2_0000, 0xC2_0000, 0x82_0000, 0x2_0000];
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
