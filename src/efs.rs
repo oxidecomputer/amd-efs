@@ -280,7 +280,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 None => {
                     result = None
                 },
-                Some(size) => { // has payload
+                Some(size) => {
                     if size == 0 {
                         result = None
                     } else {
