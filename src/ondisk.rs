@@ -103,7 +103,7 @@ pub struct Efh {
     pub xhci_fw_location: LU32, // usually unused
     pub psp_directory_table_location_naples: LU32, // usually unused
     pub psp_directory_table_location_zen: LU32,
-    /// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BIOS_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BIOS_DIRECTORY_TABLE_MILAN instead.
+    /// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BHD_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BHD_DIRECTORY_TABLE_MILAN instead.
     pub bhd_directory_tables: [LU32; 3],
     pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
     pub bhd_directory_table_milan: LU32, // or Combo

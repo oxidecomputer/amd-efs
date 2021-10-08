@@ -584,7 +584,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         Err(Error::PspDirectoryHeaderNotFound)
     }
 
-    /// Returns an iterator over level 1 BIOS directories
+    /// Returns an iterator over level 1 BHD directories
     pub fn bhd_directories(&self) -> Result<EfhBhdsIterator<T, ERASABLE_BLOCK_SIZE>> {
         let efh = &self.efh;
         let positions = [efh.bhd_directory_table_milan.get(), efh.bhd_directory_tables[2].get() & 0x00ff_ffff, efh.bhd_directory_tables[1].get() & 0x00ff_ffff, efh.bhd_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
