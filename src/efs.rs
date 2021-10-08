@@ -449,6 +449,7 @@ pub struct Efs<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZ
 
 impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> Efs<T, ERASABLE_BLOCK_SIZE> {
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again (I think it would be better to have the user just construct two different Efs instances in that case)
+    const EFH_SIZE: u32 = 0x200;
     pub(crate) fn efh_beginning(storage: &T, processor_generation: Option<ProcessorGeneration>) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
         for position in EFH_POSITION.iter() {
             let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
@@ -597,7 +598,16 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
     // Make sure there's no overlap (even when rounded to entire erasure blocks)
     fn ensure_no_overlap(&self, beginning: Location, end: Location) -> Result<()> {
         let (beginning, end) = T::grow_to_erasable_block(beginning, end);
-        // FIXME: check EFH no-overlap!
+        // Check EFH no-overlap
+        let reference_beginning = Location::from(self.efh_beginning);
+        let reference_end = reference_beginning.checked_add(Self::EFH_SIZE).ok_or(Error::Misaligned)?;
+        let (reference_beginning, reference_end) = T::grow_to_erasable_block(reference_beginning, reference_end);
+        let intersection_beginning = beginning.max(reference_beginning);
+        let intersection_end = end.min(reference_end);
+        if intersection_beginning < intersection_end {
+            return Err(Error::Overlap);
+        }
+
         match self.psp_directory() {
             Ok(psp_directory) => {
                 let (reference_beginning, reference_end) = T::grow_to_erasable_block(psp_directory.directory_beginning(), psp_directory.directory_end());
