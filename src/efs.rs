@@ -315,7 +315,9 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xFF; ERASABLE_BLOCK_SIZE];
         let mut remaining_size = size;
         let mut payload_position = payload_position;
-        let contents_end = Location::from(self.contents_end()) as usize;
+        let contents_beginning = Location::from(self.contents_beginning());
+        let contents_end = Location::from(self.contents_end());
+        let payload_meant_inside_contents = Location::from(payload_position) >= contents_beginning && Location::from(payload_position) <= contents_end;
         while remaining_size > 0 {
             let mut count = generate_contents(&mut buf)?;
             if count == 0 {
@@ -331,10 +333,9 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             }
 
             let end = (Location::from(payload_position) as usize).checked_add(ERASABLE_BLOCK_SIZE).ok_or(Error::DirectoryPayloadRangeCheck)?;
-            // TODO: Maybe re-enable this check--but it's probably annoying and not really useful.
-            //if end > contents_end as usize {
-            //    return Err(Error::DirectoryPayloadRangeCheck);
-            //}
+            if payload_meant_inside_contents && end > contents_end as usize {
+                return Err(Error::DirectoryPayloadRangeCheck);
+            }
             remaining_size = remaining_size.checked_sub(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
             self.storage.erase_and_write_block(payload_position, &buf)?;
             payload_position = payload_position.advance(ERASABLE_BLOCK_SIZE)?;
