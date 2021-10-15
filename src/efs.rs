@@ -331,7 +331,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             }
 
             let end = (Location::from(payload_position) as usize).checked_add(ERASABLE_BLOCK_SIZE).ok_or(Error::DirectoryPayloadRangeCheck)?;
-            // FIXME: This is disabled until we know what to do about reset images not liking to be directly inside directories.
+            // TODO: Maybe re-enable this check--but it's probably annoying and not really useful.
             //if end > contents_end as usize {
             //    return Err(Error::DirectoryPayloadRangeCheck);
             //}
