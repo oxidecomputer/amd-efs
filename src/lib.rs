@@ -7,6 +7,7 @@ mod ondisk;
 mod types;
 pub use types::Result;
 pub use types::Error;
+pub use types::ValueOrLocation;
 pub use crate::efs::Efs;
 pub use crate::efs::BhdDirectory;
 pub use crate::efs::ProcessorGeneration;
