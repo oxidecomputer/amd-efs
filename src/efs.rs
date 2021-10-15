@@ -310,7 +310,10 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     }
 
     /// Repeatedly calls GENERATE_CONTENTS, which fills it's passed buffer as much as possible, as long as the total <= SIZE.
-    /// GENERATE_CONTENTS can only return a number (of u8 that are filled in BUF) smaller than the possible size if the blob is ending.
+    /// (GENERATE_CONTENTS can only return a number (of u8 that are filled in BUF) smaller than the possible size if the blob is ending)
+    /// Then ADD_PAYLOAD stores all that starting at PAYLOAD_POSITION, or, if that is not present, the next available location in the directory.
+    /// If what we stored so far is less than SIZE, we store 0xFF for the remainder.
+    /// It is an error to add a payload that is bigger than SIZE.
     pub(crate) fn add_payload(&mut self, payload_position: ErasableLocation<ERASABLE_BLOCK_SIZE>, size: usize, generate_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xFF; ERASABLE_BLOCK_SIZE];
         let mut remaining_size = size;
@@ -318,36 +321,40 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         let contents_beginning = Location::from(self.contents_beginning());
         let contents_end = Location::from(self.contents_end());
         let payload_meant_inside_contents = Location::from(payload_position) >= contents_beginning && Location::from(payload_position) <= contents_end;
+        let mut padding = false;
         while remaining_size > 0 {
-            let mut count = generate_contents(&mut buf)?;
-            if count == 0 {
-                break;
-            }
-            if count > remaining_size {
-                count = remaining_size;
-            }
+            let count = if padding {
+                0
+            } else {
+                let mut count = generate_contents(&mut buf)?;
+                if count == 0 { // EOF
+                    padding = true;
+                }
+                if count > remaining_size {
+                    return Err(Error::DirectoryPayloadRangeCheck);
+                }
+                count
+            };
+            // pad with 0xFF
             if count < buf.len() {
                 for i in count..buf.len() {
                     buf[i] = 0xFF;
                 }
             }
+            let count = buf.len();
 
-            let end = (Location::from(payload_position) as usize).checked_add(ERASABLE_BLOCK_SIZE).ok_or(Error::DirectoryPayloadRangeCheck)?;
+            let end = (Location::from(payload_position) as usize).checked_add(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
             if payload_meant_inside_contents && end > contents_end as usize {
                 return Err(Error::DirectoryPayloadRangeCheck);
             }
-            remaining_size = remaining_size.checked_sub(count).ok_or(Error::DirectoryPayloadRangeCheck)?;
+            remaining_size = remaining_size.saturating_sub(count);
             self.storage.erase_and_write_block(payload_position, &buf)?;
-            payload_position = payload_position.advance(ERASABLE_BLOCK_SIZE)?;
+            payload_position = payload_position.advance(count)?;
             if count < buf.len() {
-                break;
+                padding = true;
             }
         }
-        if remaining_size == 0 {
-            Ok(())
-        } else {
-            Err(Error::DirectoryPayloadRangeCheck)
-        }
+        Ok(())
     }
 }
 
