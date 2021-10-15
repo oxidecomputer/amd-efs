@@ -574,7 +574,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         }
     }
 
-    pub fn secondary_psp_directory(&self) -> Result<PspDirectory<T, ERASABLE_BLOCK_SIZE>> {
+    pub fn second_level_psp_directory(&self) -> Result<PspDirectory<T, ERASABLE_BLOCK_SIZE>> {
         let main_directory = self.psp_directory()?;
         for entry in main_directory.entries() {
             if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
