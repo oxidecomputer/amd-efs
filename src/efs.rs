@@ -94,7 +94,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             },
         }
     }
-    fn create(storage: &'a mut T, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>, cookie: [u8; 4]) -> Result<Self> {
+    fn create(storage: &'a T, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xFF; ERASABLE_BLOCK_SIZE];
         match header_from_collection_mut::<MainHeader>(&mut buf[..]) {
             Some(item) => {
@@ -362,6 +362,13 @@ pub type PspDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<'a, P
 pub type BhdDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, 0x1000, ERASABLE_BLOCK_SIZE>;
 
 impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASABLE_BLOCK_SIZE: usize> Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE> {
+    // Note: Function is crate-private because there's no overlap checking
+    pub(crate) fn create_subdirectory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<Self> {
+        // FIXME: find existing SecondLevelDirectory, error out if found.
+        self.add_entry(beginning.into(), &PspDirectoryEntry::new_payload(&PspDirectoryEntryAttrs::new().with_type_(PspDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into())?)?;
+        Self::create(self.storage, beginning, end, *b"$PL2")
+    }
+
     // FIXME: Type-check
     pub fn add_value_entry(&mut self, attrs: &PspDirectoryEntryAttrs, value: u64) -> Result<()> {
         match self.add_entry(None, &PspDirectoryEntry::new_value(attrs, value))? {
@@ -392,6 +399,12 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
 }
 
 impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASABLE_BLOCK_SIZE: usize> Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE> {
+    // Note: Function is crate-private because there's no overlap checking
+    pub(crate) fn create_subdirectory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<Self> {
+        // FIXME: find existing SecondLevelDirectory, error out if found.
+        self.add_entry(beginning.into(), &BhdDirectoryEntry::new_payload(&BhdDirectoryEntryAttrs::new().with_type_(BhdDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into(), None)?)?;
+        Self::create(&mut self.storage, beginning, end, *b"$BL2")
+    }
     pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>> {
         self.add_entry(payload_position, &BhdDirectoryEntry::new_payload(attrs, size, 0, Some(destination_location))?)
     }
@@ -721,20 +734,6 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
 
     pub fn create_second_level_psp_directory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
         self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
-        match self.psp_directory() {
-            Err(e) => {
-                Err(e)
-            }
-            Ok(mut main_directory) => {
-                // FIXME: find existing SecondLevelDirectory, error out.
-                main_directory.add_blob_entry(beginning.into(), &PspDirectoryEntryAttrs::new().with_type_(PspDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), &mut |buf: &mut [u8]| {
-                    Ok(0)
-                })?;
-
-                let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PL2")?;
-                Ok(result)
-            }
-        }
+        self.psp_directory()?.create_subdirectory(beginning, end)
     }
-
 }
