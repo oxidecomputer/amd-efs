@@ -364,7 +364,13 @@ pub type BhdDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<'a, B
 impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASABLE_BLOCK_SIZE: usize> Directory<'a, PspDirectoryHeader, PspDirectoryEntry, T, PspDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE> {
     // Note: Function is crate-private because there's no overlap checking
     pub(crate) fn create_subdirectory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<Self> {
-        // FIXME: find existing SecondLevelDirectory, error out if found.
+        // Find existing SecondLevelDirectory, error out if found.
+        let mut entries = self.entries();
+        for entry in entries {
+            if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
+                return Err(Error::Duplicate);
+            }
+        }
         self.add_entry(beginning.into(), &PspDirectoryEntry::new_payload(&PspDirectoryEntryAttrs::new().with_type_(PspDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into())?)?;
         Self::create(self.storage, beginning, end, *b"$PL2")
     }
@@ -401,7 +407,13 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
 impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const SPI_BLOCK_SIZE: usize, const ERASABLE_BLOCK_SIZE: usize> Directory<'a, BhdDirectoryHeader, BhdDirectoryEntry, T, BhdDirectoryEntryAttrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE> {
     // Note: Function is crate-private because there's no overlap checking
     pub(crate) fn create_subdirectory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<Self> {
-        // FIXME: find existing SecondLevelDirectory, error out if found.
+        // Find existing SecondLevelDirectory, error out if found.
+        let mut entries = self.entries();
+        for entry in entries {
+            if entry.type_() == BhdDirectoryEntryType::SecondLevelDirectory {
+                return Err(Error::Duplicate);
+            }
+        }
         self.add_entry(beginning.into(), &BhdDirectoryEntry::new_payload(&BhdDirectoryEntryAttrs::new().with_type_(BhdDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into(), None)?)?;
         Self::create(&mut self.storage, beginning, end, *b"$BL2")
     }
@@ -736,4 +748,9 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
         self.psp_directory()?.create_subdirectory(beginning, end)
     }
+
+    /*pub fn create_second_level_bhd_directory<'c>(&self, bhd_directory: &mut BhdDirectory<'c, T, ERASABLE_BLOCK_SIZE>, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<BhdDirectory<'c, T, ERASABLE_BLOCK_SIZE>> {
+        self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
+        bhd_directory.create_subdirectory(beginning, end)
+    }*/
 }
