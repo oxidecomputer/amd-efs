@@ -708,7 +708,6 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
                 return Err(e);
             }
             Ok(_) => {
-                // FIXME: Create level 2 PSP Directory
                 return Err(Error::Duplicate);
             }
         }
@@ -719,4 +718,23 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
         Ok(result)
     }
+
+    pub fn create_second_level_psp_directory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
+        self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
+        match self.psp_directory() {
+            Err(e) => {
+                Err(e)
+            }
+            Ok(mut main_directory) => {
+                // FIXME: find existing SecondLevelDirectory, error out.
+                main_directory.add_blob_entry(beginning.into(), &PspDirectoryEntryAttrs::new().with_type_(PspDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), &mut |buf: &mut [u8]| {
+                    Ok(0)
+                })?;
+
+                let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PL2")?;
+                Ok(result)
+            }
+        }
+    }
+
 }
