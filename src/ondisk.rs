@@ -630,7 +630,7 @@ impl core::fmt::Debug for BhdDirectoryHeader {
 pub enum BhdDirectoryEntryType {
     OemPublicKey = 0x05,
     CryptographicSignature = 0x07,
-    Apcb = 0x60,
+    Apcb = 0x60, // usually instances 0 (updatable) and 1 (eventlog)
     Apob = 0x61,
     Bios = 0x62,
     ApobNvCopy = 0x63, // used during S3 resume
@@ -638,7 +638,7 @@ pub enum BhdDirectoryEntryType {
     PmuFirmwareData = 0x65,
     MicrocodePatch = 0x66,
     MceData = 0x67,
-    ApcbBackup = 0x68,
+    ApcbBackup = 0x68, // usually instances 0 (backup), 8 (updatable) and 9 (eventlog)
     VgaInterpreter = 0x69,
     Mp2FirmwareConfiguration = 0x6A,
     CorebootVbootWorkbuffer = 0x6B, // main memory shared between PSP and x86
