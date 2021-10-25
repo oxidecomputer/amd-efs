@@ -8,6 +8,7 @@ use amd_flash::Location;
 use crate::types::ValueOrLocation;
 use crate::types::Error;
 use crate::types::Result;
+use strum_macros::EnumString;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
@@ -142,7 +143,7 @@ impl Default for Efh {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString)]
 pub enum ProcessorGeneration {
     Rome = 0, // FIXME: This is NOT supported by this crate.  A lot of things will check weird stuff.  You have been warned.
     Milan = 1,
