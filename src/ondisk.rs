@@ -158,15 +158,29 @@ impl Efh {
     /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place
     /// Note: generation 1 is Milan
     pub fn compatible_with_processor_generation(&self, generation: ProcessorGeneration) -> bool {
-        let generation: u8 = generation as u8;
-        assert!(generation < 16);
-        self.second_gen_efs.get() & (1 << generation) == 0
+        match generation {
+            ProcessorGeneration::Rome => {
+                // Rome didn't have generation flags yet, so make sure none of them are cleared.
+                self.second_gen_efs.get() == 0xffff_fffe
+            },
+            generation => {
+                let generation: u8 = generation as u8;
+                assert!(generation < 16);
+                self.second_gen_efs.get() & (1 << generation) == 0
+            }
+        }
     }
 
     pub fn second_gen_efs_for_processor_generation(generation: ProcessorGeneration) -> u32 {
-        let generation: u8 = generation as u8;
-        assert!(generation < 16);
-        0xffff_fffe &! (1 << generation)
+        match generation {
+            // Rome didn't have generation flags yet, so make sure to clear none of them.
+            ProcessorGeneration::Rome => 0xffff_fffe,
+            generation => {
+                let generation: u8 = generation as u8;
+                assert!(generation < 16);
+                0xffff_fffe &! (1 << generation)
+            }
+        }
     }
 }
 
