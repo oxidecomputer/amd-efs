@@ -213,10 +213,6 @@ impl DirectoryAdditionalInfo {
         result.set_spi_block_size_checked(value)?;
         Ok(result)
     }
-    pub fn with_spi_block_size(&mut self, value: u16) -> &mut Self {
-        self.with_spi_block_size_checked(value);
-        self
-    }
     pub fn spi_block_size_or_err(&self) -> core::result::Result<u16, modular_bitfield::error::InvalidBitPattern<u8>> {
         let spi_block_size = ((u32::from(*self) >> 10) & 0xf) as u16;
         match spi_block_size {
@@ -237,9 +233,6 @@ impl DirectoryAdditionalInfo {
         }
         *self = Self::from(mask);
         Ok(())
-    }
-    pub fn set_spi_block_size(&mut self, value: u16) {
-        self.set_spi_block_size_checked(value);
     }
     /// Given a value, tries to convert it into UNIT without loss.  If that's not possible, returns None
     pub fn try_into_unit(value: usize) -> Option<u16> {
