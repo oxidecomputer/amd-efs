@@ -297,7 +297,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 None => {
                 },
                 Some(beginning) => {
-                    entry.set_source(ValueOrLocation::Location(Location::from(beginning).into()));
+                    entry.set_source(ValueOrLocation::Location(Location::from(beginning).into()))?;
                 }
             }
             let location: Location = self.location.into();
