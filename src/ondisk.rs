@@ -485,9 +485,9 @@ pub trait DirectoryEntry {
 
 impl PspDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
-    pub fn type_(&self) -> PspDirectoryEntryType {
+    pub fn type_or_err(&self) -> Result<PspDirectoryEntryType> {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.type_()
+        attrs.type__or_err().map_err(|_| Error::PspDirectoryEntryTypeMismatch)
     }
     pub fn sub_program(&self) -> u8 {
         let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
@@ -703,9 +703,9 @@ impl Default for BhdDirectoryEntry {
 impl BhdDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     const DESTINATION_NONE_MARKER: u64 = 0xffff_ffff_ffff_ffff;
-    pub fn type_(&self) -> BhdDirectoryEntryType {
+    pub fn type_or_err(&self) -> Result<BhdDirectoryEntryType> {
         let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.type_()
+        attrs.type__or_err().map_err(|_| Error::PspDirectoryEntryTypeMismatch)
     }
 
     pub fn region_type(&self) -> BhdDirectoryEntryRegionType {

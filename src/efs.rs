@@ -364,8 +364,12 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
         // Find existing SecondLevelDirectory, error out if found.
         let entries = self.entries();
         for entry in entries {
-            if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
-                return Err(Error::Duplicate);
+            match entry.type_or_err() {
+                Ok(PspDirectoryEntryType::SecondLevelDirectory) => {
+                    return Err(Error::Duplicate);
+                },
+                _ => { // maybe just unknown
+                },
             }
         }
         self.add_entry(beginning.into(), &PspDirectoryEntry::new_payload(&PspDirectoryEntryAttrs::new().with_type_(PspDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into())?)?;
@@ -407,8 +411,12 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
         // Find existing SecondLevelDirectory, error out if found.
         let entries = self.entries();
         for entry in entries {
-            if entry.type_() == BhdDirectoryEntryType::SecondLevelDirectory {
-                return Err(Error::Duplicate);
+            match entry.type_or_err() {
+                Ok(BhdDirectoryEntryType::SecondLevelDirectory) => {
+                    return Err(Error::Duplicate);
+                },
+                _ => { // maybe just unknown type.
+                },
             }
         }
         self.add_entry(beginning.into(), &BhdDirectoryEntry::new_payload(&BhdDirectoryEntryAttrs::new().with_type_(BhdDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into(), None)?)?;
@@ -599,20 +607,24 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
     pub fn second_level_psp_directory(&self) -> Result<PspDirectory<T, ERASABLE_BLOCK_SIZE>> {
         let main_directory = self.psp_directory()?;
         for entry in main_directory.entries() {
-            if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
-                match entry.source() {
-                    ValueOrLocation::Location(psp_directory_table_location) => {
-                        if psp_directory_table_location >= 0x1_0000_0000 {
+            match entry.type_or_err() {
+                Ok(PspDirectoryEntryType::SecondLevelDirectory) => {
+                    match entry.source() {
+                        ValueOrLocation::Location(psp_directory_table_location) => {
+                            if psp_directory_table_location >= 0x1_0000_0000 {
+                                return Err(Error::PspDirectoryEntryTypeMismatch)
+                            } else {
+                                let directory = PspDirectory::load(&self.storage, psp_directory_table_location.try_into().map_err(|_| Error::DirectoryRangeCheck)?)?;
+                                return Ok(directory);
+                            }
+                        },
+                        _ => {
                             return Err(Error::PspDirectoryEntryTypeMismatch)
-                        } else {
-                            let directory = PspDirectory::load(&self.storage, psp_directory_table_location.try_into().map_err(|_| Error::DirectoryRangeCheck)?)?;
-                            return Ok(directory);
                         }
-                    },
-                    _ => {
-                        return Err(Error::PspDirectoryEntryTypeMismatch)
                     }
-                }
+                },
+                _ => { // maybe just unknown entry type.
+                },
             }
         }
         Err(Error::PspDirectoryHeaderNotFound)
