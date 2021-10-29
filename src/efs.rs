@@ -323,7 +323,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             let count = if padding {
                 0
             } else {
-                let mut count = generate_contents(&mut buf)?;
+                let count = generate_contents(&mut buf)?;
                 if count == 0 { // EOF
                     padding = true;
                 }
