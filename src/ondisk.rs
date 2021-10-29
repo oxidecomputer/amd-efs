@@ -142,23 +142,44 @@ impl Default for Efh {
     }
 }
 
-#[repr(u8)]
+#[repr(i8)]
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString)]
 pub enum ProcessorGeneration {
+    Naples = -1,
     Rome = 0, // FIXME: This is NOT supported by this crate.  A lot of things will check weird stuff.  You have been warned.
     Milan = 1,
 }
 
+#[repr(u8)]
+pub enum LocationMode {
+    Offset = 0,
+    Mmio = 1,
+}
+
 impl Efh {
-    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place
+    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
     pub fn second_gen_efs(&self) -> bool {
         self.second_gen_efs.get() & 1 == 0
     }
 
-    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place
+    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
+    /// Old (pre-Rome) boards had MMIO addresses instead of offsets in the slots.  Find out whether that's the case.
+    pub fn location_mode(&self) -> LocationMode {
+        match self.second_gen_efs.get() & 1 {
+            0 => LocationMode::Offset,
+            _ => LocationMode::Mmio,
+        }
+    }
+
+    /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
     /// Note: generation 1 is Milan
     pub fn compatible_with_processor_generation(&self, generation: ProcessorGeneration) -> bool {
         match generation {
+            ProcessorGeneration::Naples => {
+                // Naples didn't have generation flags yet, so make sure none of them are cleared.
+                // Naples didn't have normal (non-MMIO) offsets yet--so those also should be unavailable.
+                self.second_gen_efs.get() == 0xffff_ffff
+            },
             ProcessorGeneration::Rome => {
                 // Rome didn't have generation flags yet, so make sure none of them are cleared.
                 self.second_gen_efs.get() == 0xffff_fffe
@@ -173,6 +194,8 @@ impl Efh {
 
     pub fn second_gen_efs_for_processor_generation(generation: ProcessorGeneration) -> u32 {
         match generation {
+            // Naples didn't have normal (non-MMIO) offsets yet--so mark them unavailable.
+            ProcessorGeneration::Naples => 0xffff_ffff,
             // Rome didn't have generation flags yet, so make sure to clear none of them.
             ProcessorGeneration::Rome => 0xffff_fffe,
             generation => {
