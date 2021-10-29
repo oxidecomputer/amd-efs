@@ -314,6 +314,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     /// Then ADD_PAYLOAD stores all that starting at PAYLOAD_POSITION, or, if that is not present, the next available location in the directory.
     /// If what we stored so far is less than SIZE, we store 0xFF for the remainder.
     /// It is an error to add a payload that is bigger than SIZE.
+    /// The reason we only allows full-size buffer results from each callback because we will be erasing a flash block and then writing the callback result to it.
     pub(crate) fn add_payload(&mut self, payload_position: ErasableLocation<ERASABLE_BLOCK_SIZE>, size: usize, generate_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>) -> Result<()> {
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xFF; ERASABLE_BLOCK_SIZE];
         let mut remaining_size = size;
