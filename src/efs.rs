@@ -61,8 +61,8 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         Ok(size_of::<MainHeader>().checked_add(size_of::<Item>().checked_mul(total_entries as usize).ok_or(Error::DirectoryRangeCheck)?).ok_or(Error::DirectoryRangeCheck)?.try_into().map_err(|_| Error::DirectoryRangeCheck)?)
     }
 
-    /// Note: Caller has to check whether it is the right cookie!
-    fn load(storage: &'a T, location: Location) -> Result<Self> {
+    /// Note: Caller has to check whether it is the right cookie (possibly afterwards)!
+    pub fn load(storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xff; ERASABLE_BLOCK_SIZE];
         storage.read_exact(location, &mut buf)?;
         match header_from_collection::<MainHeader>(&buf[..size_of::<MainHeader>()]) {
