@@ -8,6 +8,7 @@ use amd_flash::Location;
 use crate::types::ValueOrLocation;
 use crate::types::Error;
 use crate::types::Result;
+use crate::types::LocationMode;
 use strum_macros::EnumString;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 
@@ -146,14 +147,32 @@ impl Default for Efh {
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString)]
 pub enum ProcessorGeneration {
     Naples = -1,
-    Rome = 0, // FIXME: This is NOT supported by this crate.  A lot of things will check weird stuff.  You have been warned.
+    Rome = 0,
     Milan = 1,
 }
 
-#[repr(u8)]
-pub enum LocationMode {
-    Offset = 0,
-    Mmio = 1,
+pub(crate) fn mmio_decode(location_mode: LocationMode, value: u64) -> u64 {
+    match location_mode {
+        LocationMode::Offset => value,
+        LocationMode::Mmio => {
+            if value == 0 {
+                value
+            } else {
+                assert!(value &! 0xff_ffff == 0xff00_0000);
+                (value & 0xff_ffff) as u64
+            }
+        },
+    }
+}
+
+pub(crate) fn mmio_encode(location_mode: LocationMode, value: u64) -> u64 {
+    match location_mode {
+        LocationMode::Offset => value,
+        LocationMode::Mmio => {
+            assert!(value <= 0xff_ffff);
+            value | 0xff00_0000
+        },
+    }
 }
 
 impl Efh {

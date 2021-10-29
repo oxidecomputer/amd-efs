@@ -1,10 +1,11 @@
 use amd_flash::{FlashRead, FlashWrite, Location, ErasableLocation};
 use crate::ondisk::EFH_POSITION;
-use crate::ondisk::{BhdDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BhdDirectoryEntry, BhdDirectoryEntryAttrs, BhdDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry};
+use crate::ondisk::{BhdDirectoryHeader, Efh, PspDirectoryHeader, PspDirectoryEntry, PspDirectoryEntryAttrs, BhdDirectoryEntry, BhdDirectoryEntryAttrs, BhdDirectoryEntryType, PspDirectoryEntryType, DirectoryAdditionalInfo, AddressMode, DirectoryHeader, DirectoryEntry, mmio_decode, mmio_encode};
 pub use crate::ondisk::ProcessorGeneration;
 use crate::types::Result;
 use crate::types::Error;
 use crate::types::ValueOrLocation;
+use crate::types::LocationMode;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 use core::mem::size_of;
@@ -17,6 +18,7 @@ use zerocopy::AsBytes;
 
 pub struct DirectoryIter<'a, Item, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> {
     storage: &'a T,
+    entry_location_mode: LocationMode,
     beginning: Location, // current item (directory entry)
     end: Location,
     total_entries: u32,
@@ -24,7 +26,7 @@ pub struct DirectoryIter<'a, Item, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERAS
     _item: PhantomData<Item>,
 }
 
-impl<'a, Item: FromBytes + Copy, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> Iterator for DirectoryIter<'a, Item, T, ERASABLE_BLOCK_SIZE> {
+impl<'a, Item: DirectoryEntry + FromBytes + Copy, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> Iterator for DirectoryIter<'a, Item, T, ERASABLE_BLOCK_SIZE> {
     type Item = Item;
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         if self.index < self.total_entries {
@@ -35,7 +37,15 @@ impl<'a, Item: FromBytes + Copy, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERASAB
             let result = header_from_collection::<Item>(buf)?; // TODO: Check for errors
             self.beginning += size_of::<Item>() as u32; // FIXME: range check
             self.index += 1;
-            Some(*result)
+            let mut q = *result;
+            match q.source() {
+                ValueOrLocation::Location(value) => {
+                    q.set_source(ValueOrLocation::Location(mmio_decode(self.entry_location_mode, value)));
+                },
+                x => {
+                },
+            }
+            Some(q)
         } else {
             None
         }
@@ -46,6 +56,7 @@ impl<'a, Item: FromBytes + Copy, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERASAB
 pub struct Directory<'a, MainHeader, Item: FromBytes, T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, Attrs: Sized, const _SPI_BLOCK_SIZE: usize, const ERASABLE_BLOCK_SIZE: usize> {
     storage: &'a T,
     location: Location, // ideally ErasableLocation<ERASABLE_BLOCK_SIZE>--but that's impossible with AMD-generated images.
+    entry_location_mode: LocationMode,
     pub header: MainHeader, // FIXME: make read-only
     directory_headers_size: u32,
     _attrs: PhantomData<Attrs>,
@@ -62,7 +73,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     }
 
     /// Note: Caller has to check whether it is the right cookie (possibly afterwards)!
-    pub fn load(storage: &'a T, location: Location) -> Result<Self> {
+    pub fn load(entry_location_mode: LocationMode, storage: &'a T, location: Location) -> Result<Self> {
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xff; ERASABLE_BLOCK_SIZE];
         storage.read_exact(location, &mut buf)?;
         match header_from_collection::<MainHeader>(&buf[..size_of::<MainHeader>()]) {
@@ -73,6 +84,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                     Ok(Self {
                         storage,
                         location,
+                        entry_location_mode,
                         header: *header,
                         directory_headers_size: if contents_base == 0 {
                             // Note: This means the number of entries cannot be changed (without moving ALL the payload--which we don't want).
@@ -94,7 +106,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
             },
         }
     }
-    fn create(storage: &'a T, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>, cookie: [u8; 4]) -> Result<Self> {
+    fn create(entry_location_mode: LocationMode, storage: &'a T, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>, cookie: [u8; 4]) -> Result<Self> {
         let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xFF; ERASABLE_BLOCK_SIZE];
         match header_from_collection_mut::<MainHeader>(&mut buf[..]) {
             Some(item) => {
@@ -112,7 +124,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                   .with_address_mode(AddressMode::EfsRelativeOffset);
                 item.set_additional_info(additional_info);
                 storage.erase_and_write_block(beginning, &buf)?;
-                Self::load(storage, Location::from(beginning))
+                Self::load(entry_location_mode, storage, Location::from(beginning))
             }
             None => {
                 Err(Error::Marshal)
@@ -208,6 +220,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     pub fn entries(&self) -> DirectoryIter<Item, T, ERASABLE_BLOCK_SIZE> {
         DirectoryIter::<Item, T, ERASABLE_BLOCK_SIZE> {
             storage: self.storage,
+            entry_location_mode: self.entry_location_mode,
             beginning: self.directory_beginning(),
             end: self.directory_end(), // actually, much earlier--this here is the allocation, not the actual size
             total_entries: self.header.total_entries(),
@@ -293,7 +306,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
                 None => {
                 },
                 Some(beginning) => {
-                    entry.set_source(ValueOrLocation::Location(Location::from(beginning).into()))?;
+                    entry.set_source(ValueOrLocation::Location(mmio_encode(self.entry_location_mode, Location::from(beginning).into())))?;
                 }
             }
             let location: Location = self.location.into();
@@ -373,7 +386,7 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
             }
         }
         self.add_entry(beginning.into(), &PspDirectoryEntry::new_payload(&PspDirectoryEntryAttrs::new().with_type_(PspDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into())?)?;
-        Self::create(self.storage, beginning, end, *b"$PL2")
+        Self::create(self.entry_location_mode, self.storage, beginning, end, *b"$PL2")
     }
 
     // FIXME: Type-check
@@ -420,7 +433,7 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
             }
         }
         self.add_entry(beginning.into(), &BhdDirectoryEntry::new_payload(&BhdDirectoryEntryAttrs::new().with_type_(BhdDirectoryEntryType::SecondLevelDirectory), ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end), beginning.into(), None)?)?;
-        Self::create(&mut self.storage, beginning, end, *b"$BL2")
+        Self::create(self.entry_location_mode, &mut self.storage, beginning, end, *b"$BL2")
     }
     pub(crate) fn add_entry_with_destination(&mut self, payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>, attrs: &BhdDirectoryEntryAttrs, size: u32, destination_location: u64) -> Result<Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>> {
         self.add_entry(payload_position, &BhdDirectoryEntry::new_payload(attrs, size, 0, Some(destination_location))?)
@@ -457,6 +470,7 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
 
 pub struct EfhBhdsIterator<'a, T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const ERASABLE_BLOCK_SIZE: usize> {
     storage: &'a T,
+    entry_location_mode: LocationMode,
     positions: [u32; 4], // 0xffff_ffff: invalid
     index_into_positions: usize,
 }
@@ -468,7 +482,7 @@ impl<'a, T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, co
            let position = self.positions[self.index_into_positions];
            self.index_into_positions += 1;
            if position != 0xffff_ffff && position != 0 /* sigh.  Some images have 0 as "invalid" mark */ {
-               match BhdDirectory::load(self.storage, position) {
+               match BhdDirectory::load(self.entry_location_mode, self.storage, position) {
                    Ok(e) => {
                        return Some(e);
                    },
@@ -531,6 +545,10 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         Err(Error::EfsHeaderNotFound)
     }
 
+    pub fn location_mode(&self) -> LocationMode {
+        self.efh.location_mode()
+    }
+
     pub fn load(storage: T, processor_generation: Option<ProcessorGeneration>) -> Result<Self> {
         let efh_beginning = Self::efh_beginning(&storage, processor_generation)?;
         let mut xbuf: [u8; ERASABLE_BLOCK_SIZE] = [0; ERASABLE_BLOCK_SIZE];
@@ -568,7 +586,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         if psp_directory_table_location == 0xffff_ffff {
             Err(Error::PspDirectoryHeaderNotFound)
         } else {
-            let directory = match PspDirectory::load(&self.storage, psp_directory_table_location) {
+            let directory = match PspDirectory::load(self.efh.location_mode(), &self.storage, psp_directory_table_location) {
                 Ok(directory) => {
                     if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
                         return Ok(directory);
@@ -594,7 +612,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
             if psp_directory_table_location == 0xffff_ffff || psp_directory_table_location == 0 {
                 Err(Error::PspDirectoryHeaderNotFound)
             } else {
-                let directory = PspDirectory::load(&self.storage, psp_directory_table_location)?;
+                let directory = PspDirectory::load(self.efh.location_mode(), &self.storage, psp_directory_table_location)?;
                 if directory.header.cookie == *b"$PSP" { // level 1 PSP header should have "$PSP" cookie
                     Ok(directory)
                 } else {
@@ -614,7 +632,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
                             if psp_directory_table_location >= 0x1_0000_0000 {
                                 return Err(Error::PspDirectoryEntryTypeMismatch)
                             } else {
-                                let directory = PspDirectory::load(&self.storage, psp_directory_table_location.try_into().map_err(|_| Error::DirectoryRangeCheck)?)?;
+                                let directory = PspDirectory::load(self.efh.location_mode(), &self.storage, psp_directory_table_location.try_into().map_err(|_| Error::DirectoryRangeCheck)?)?;
                                 return Ok(directory);
                             }
                         },
@@ -636,6 +654,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         let positions = [efh.bhd_directory_table_milan.get(), efh.bhd_directory_tables[2].get() & 0x00ff_ffff, efh.bhd_directory_tables[1].get() & 0x00ff_ffff, efh.bhd_directory_tables[0].get() & 0x00ff_ffff]; // the latter are physical addresses
         Ok(EfhBhdsIterator {
             storage: &self.storage,
+            entry_location_mode: self.efh.location_mode(),
             positions: positions,
             index_into_positions: 0,
         })
@@ -729,7 +748,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
             // FIXME: ensure that the others are unset?
         }
         self.write_efh()?;
-        let result = BhdDirectory::create(&mut self.storage, beginning, end, *b"$BHD")?;
+        let result = BhdDirectory::create(self.efh.location_mode(), &mut self.storage, beginning, end, *b"$BHD")?;
         Ok(result)
     }
 
@@ -749,7 +768,7 @@ impl<T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>, const 
         // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.  Then, also psp_directory_table_location_naples should be set, instead.
         self.efh.psp_directory_table_location_zen.set(beginning.into());
         self.write_efh()?;
-        let result = PspDirectory::create(&mut self.storage, beginning, end, *b"$PSP")?;
+        let result = PspDirectory::create(self.efh.location_mode(), &mut self.storage, beginning, end, *b"$PSP")?;
         Ok(result)
     }
 

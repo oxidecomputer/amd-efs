@@ -28,3 +28,10 @@ pub enum ValueOrLocation {
     Value(u64),
     Location(u64),
 }
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum LocationMode {
+    Offset = 0,
+    Mmio = 1,
+}
