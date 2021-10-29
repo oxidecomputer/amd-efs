@@ -29,7 +29,7 @@ impl<'a, Item: FromBytes + Copy, T: FlashRead<ERASABLE_BLOCK_SIZE>, const ERASAB
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         if self.index < self.total_entries {
             let mut buf: [u8; ERASABLE_BLOCK_SIZE] = [0xff; ERASABLE_BLOCK_SIZE];
-            let mut buf = &mut buf[..size_of::<Item>()];
+            let buf = &mut buf[..size_of::<Item>()];
             self.storage.read_exact(self.beginning, buf).ok()?;
             // FIXME: range check so we don't fall off the end!
             let result = header_from_collection::<Item>(buf)?; // TODO: Check for errors
@@ -174,8 +174,6 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         }
     }
     fn directory_beginning(&self) -> Location {
-        let additional_info = self.header.additional_info();
-        let contents_base = DirectoryAdditionalInfo::try_from_unit(additional_info.base_address()).unwrap();
         let location: Location = self.location.into();
         location + size_of::<MainHeader>() as Location // FIXME: range check
     }
@@ -208,8 +206,6 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
         ErasableLocation::<ERASABLE_BLOCK_SIZE>::try_from(end).unwrap()
     }
     pub fn entries(&self) -> DirectoryIter<Item, T, ERASABLE_BLOCK_SIZE> {
-        let additional_info = self.header.additional_info();
-
         DirectoryIter::<Item, T, ERASABLE_BLOCK_SIZE> {
             storage: self.storage,
             beginning: self.directory_beginning(),
@@ -221,7 +217,7 @@ impl<'a, MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default, Ite
     }
 
     pub(crate) fn find_payload_empty_slot(&self, size: u32) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
-        let mut entries = self.entries();
+        let entries = self.entries();
         let contents_beginning = Location::from(self.contents_beginning()) as u64;
         let contents_end = Location::from(self.contents_end()) as u64;
         let mut frontier: u64 = contents_beginning;
@@ -366,7 +362,7 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
     // Note: Function is crate-private because there's no overlap checking
     pub(crate) fn create_subdirectory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<Self> {
         // Find existing SecondLevelDirectory, error out if found.
-        let mut entries = self.entries();
+        let entries = self.entries();
         for entry in entries {
             if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
                 return Err(Error::Duplicate);
@@ -409,7 +405,7 @@ impl<'a, T: 'a + FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE
     // Note: Function is crate-private because there's no overlap checking
     pub(crate) fn create_subdirectory(&mut self, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<Self> {
         // Find existing SecondLevelDirectory, error out if found.
-        let mut entries = self.entries();
+        let entries = self.entries();
         for entry in entries {
             if entry.type_() == BhdDirectoryEntryType::SecondLevelDirectory {
                 return Err(Error::Duplicate);
