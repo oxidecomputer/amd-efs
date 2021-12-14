@@ -1,7 +1,5 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
-use crate::struct_accessors::Getter;
-use crate::struct_accessors::Setter;
 use crate::types::Error;
 use crate::types::LocationMode;
 use crate::types::Result;
@@ -14,6 +12,8 @@ use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 use num_traits::ToPrimitive;
 use crate::struct_accessors::make_accessors;
+use crate::struct_accessors::Getter;
+use crate::struct_accessors::Setter;
 use strum_macros::EnumString;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 //use crate::configs;
@@ -103,6 +103,30 @@ impl Default for EfhNaplesSpiMode {
 	}
 }
 
+impl Getter<Result<EfhNaplesSpiMode>> for EfhNaplesSpiMode {
+	fn get1(self) -> Result<Self> {
+		Ok(self)
+	}
+}
+
+impl Setter<EfhNaplesSpiMode> for EfhNaplesSpiMode {
+	fn set1(&mut self, value: EfhNaplesSpiMode) {
+		*self = value
+	}
+}
+
+impl Getter<Result<EfhRomeSpiMode>> for EfhRomeSpiMode {
+	fn get1(self) -> Result<Self> {
+		Ok(self)
+	}
+}
+
+impl Setter<EfhRomeSpiMode> for EfhRomeSpiMode {
+	fn set1(&mut self, value: EfhRomeSpiMode) {
+		*self = value
+	}
+}
+
 #[repr(u8)]
 #[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[non_exhaustive]
@@ -132,27 +156,29 @@ impl Default for EfhRomeSpiMode {
 	}
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-#[repr(C, packed)]
-pub struct Efh {
-	pub signature: LU32,                           // 0x55aa_55aa
-	pub imc_fw_location: LU32,                     // usually unused
-	pub gbe_fw_location: LU32,                     // usually unused
-	pub xhci_fw_location: LU32,                    // usually unused
-	pub psp_directory_table_location_naples: LU32, // usually unused
-	pub psp_directory_table_location_zen: LU32,
-	/// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BHD_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BHD_DIRECTORY_TABLE_MILAN instead.
-	pub bhd_directory_tables: [LU32; 3],
-	pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
-	pub bhd_directory_table_milan: LU32, // or Combo
-	_padding: LU32,
-	pub promontory_firmware_location: LU32,
-	pub low_power_promontory_firmware_location: LU32,
-	_padding2: [LU32; 2],                      // at offset 0x38
-	_reserved: [u8; 3], // SPI for family 15h; Note: micron_mode is reserved instead
-	pub spi_mode_zen_naples: EfhNaplesSpiMode, // and Raven Ridge
-	pub spi_mode_zen_rome: EfhRomeSpiMode,
-	_reserved2: u8,
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+	#[repr(C, packed)]
+	pub struct Efh {
+		signature: LU32 : pub get Result<u32> : pub set u32,                           // 0x55aa_55aa
+		imc_fw_location: LU32 : pub get Result<u32> : pub set u32,                     // usually unused
+		gbe_fw_location: LU32 : pub get Result<u32> : pub set u32,                     // usually unused
+		xhci_fw_location: LU32 : pub get Result<u32> : pub set u32,                    // usually unused
+		psp_directory_table_location_naples: LU32 : pub get Result<u32> : pub set u32, // usually unused
+		psp_directory_table_location_zen: LU32 : pub get Result<u32> : pub set u32,
+		/// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BHD_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BHD_DIRECTORY_TABLE_MILAN instead.
+		pub bhd_directory_tables: [LU32; 3],
+		pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
+		bhd_directory_table_milan: LU32 : pub get Result<u32> : pub set u32, // or Combo
+		_padding: LU32,
+		promontory_firmware_location: LU32 : pub get Result<u32> : pub set u32,
+		pub low_power_promontory_firmware_location: LU32 : pub get Result<u32> : pub set u32,
+		_padding2: [LU32; 2],                      // at offset 0x38
+		_reserved: [u8; 3], // SPI for family 15h; Note: micron_mode is reserved instead
+		spi_mode_zen_naples: EfhNaplesSpiMode : pub get Result<EfhNaplesSpiMode> : pub set EfhNaplesSpiMode, // and Raven Ridge
+		spi_mode_zen_rome: EfhRomeSpiMode : pub get Result<EfhRomeSpiMode> : pub set EfhRomeSpiMode,
+		_reserved2: u8,
+	}
 }
 
 impl Default for Efh {
@@ -510,12 +536,14 @@ pub enum PspDirectoryEntryType {
 
 /// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[bits = 1]
 pub enum PspSoftFuseChain32MiBSpiDecoding {
 	LowerHalf = 0,
 	UpperHalf = 1,
 }
 
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[bits = 1]
 pub enum PspSoftFuseChainPostCodeDecoding {
 	Lpc = 0,
 	Espi = 1,

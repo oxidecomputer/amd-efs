@@ -886,7 +886,7 @@ impl<
 			match header_from_collection::<Efh>(&xbuf[..]) {
 				Some(item) => {
 					// Note: only one Efh with second_gen_efs()==true allowed in entire Flash!
-					if item.signature.get() == 0x55AA55AA &&
+					if item.signature().ok().or(Some(0)).unwrap() == 0x55AA55AA &&
 						item.second_gen_efs() &&
 						match processor_generation {
 							Some(x) => item
@@ -912,7 +912,7 @@ impl<
 			storage.read_exact(*position, &mut xbuf)?;
 			match header_from_collection::<Efh>(&xbuf[..]) {
 				Some(item) => {
-					if item.signature.get() == 0x55AA55AA &&
+					if item.signature().ok().or(Some(0)).unwrap() == 0x55AA55AA &&
 						!item.second_gen_efs() &&
 						match processor_generation {
 							//Some(x) => item.compatible_with_processor_generation(x),
@@ -947,7 +947,7 @@ impl<
 		storage.read_erasable_block(efh_beginning, &mut xbuf)?;
 		let efh = header_from_collection::<Efh>(&xbuf[..])
 			.ok_or_else(|| Error::EfsHeaderNotFound)?;
-		if efh.signature.get() != 0x55aa_55aa {
+		if efh.signature().ok().or(Some(0)).unwrap() != 0x55aa_55aa {
 			return Err(Error::EfsHeaderNotFound);
 		}
 
@@ -991,7 +991,7 @@ impl<
 		&self,
 	) -> Result<PspDirectory<T, ERASABLE_BLOCK_SIZE>> {
 		let psp_directory_table_location =
-			self.efh.psp_directory_table_location_zen.get();
+			self.efh.psp_directory_table_location_zen().ok().or(Some(0xffff_ffff)).unwrap();
 		if psp_directory_table_location == 0xffff_ffff {
 			Err(Error::PspDirectoryHeaderNotFound)
 		} else {
@@ -1017,8 +1017,10 @@ impl<
 			let psp_directory_table_location = {
 				let addr = self
 					.efh
-					.psp_directory_table_location_naples
-					.get();
+					.psp_directory_table_location_naples()
+					.ok()
+					.or(Some(0xffff_ffff))
+					.unwrap();
 				if addr == 0xffff_ffff {
 					addr
 				} else {
@@ -1087,12 +1089,19 @@ impl<
 	pub fn bhd_directories(
 		&self,
 	) -> Result<EfhBhdsIterator<T, ERASABLE_BLOCK_SIZE>> {
+		fn de_mmio(v: u32) -> u32 {
+			if v == 0xffff_ffff {
+			    v
+			} else {
+			    v & 0x00ff_ffff
+			}
+		}
 		let efh = &self.efh;
 		let positions = [
-			efh.bhd_directory_table_milan.get(),
-			efh.bhd_directory_tables[2].get() & 0x00ff_ffff,
-			efh.bhd_directory_tables[1].get() & 0x00ff_ffff,
-			efh.bhd_directory_tables[0].get() & 0x00ff_ffff,
+			efh.bhd_directory_table_milan().ok().or(Some(0xffff_ffff)).unwrap(),
+			de_mmio(efh.bhd_directory_tables[2].get()),
+			de_mmio(efh.bhd_directory_tables[1].get()),
+			de_mmio(efh.bhd_directory_tables[0].get()),
 		]; // the latter are physical addresses
 		Ok(EfhBhdsIterator {
 			storage: &self.storage,
@@ -1229,8 +1238,7 @@ impl<
 		if self.efh.compatible_with_processor_generation(
 			ProcessorGeneration::Milan,
 		) {
-			self.efh.bhd_directory_table_milan
-				.set(beginning.into());
+			self.efh.set_bhd_directory_table_milan(beginning.into());
 		// FIXME: ensure that the others are unset?
 		} else {
 			self.efh.bhd_directory_tables[2].set(beginning.into());
@@ -1267,8 +1275,7 @@ impl<
 			Location::from(end),
 		)?;
 		// TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.  Then, also psp_directory_table_location_naples should be set, instead.
-		self.efh.psp_directory_table_location_zen
-			.set(beginning.into());
+		self.efh.set_psp_directory_table_location_zen(beginning.into());
 		self.write_efh()?;
 		let result = PspDirectory::create(
 			self.efh.location_mode(),

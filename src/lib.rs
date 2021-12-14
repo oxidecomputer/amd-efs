@@ -3,7 +3,9 @@
 mod amdfletcher32;
 mod efs;
 mod ondisk;
+mod struct_accessors;
 mod types;
+mod serializers;
 pub use crate::efs::BhdDirectory;
 pub use crate::efs::Efs;
 pub use crate::efs::ProcessorGeneration;
