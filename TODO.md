@@ -10,7 +10,7 @@
 
 # Convenience and Resilience
 
-* Don't allow creation of entry that are already there (unique key = ?)
+* Don't allow creation of directory entry that are already there (unique key = (type, subprogram, instance)) ; what about rom_id ?!
 * bios_directories: Return Err directly if appropriate
 * Make rom_id more useful?  (maybe not?)
 * Make it possible to add ELF image, see https://github.com/oxidecomputer/rfd/tree/0215/rfd/0215
