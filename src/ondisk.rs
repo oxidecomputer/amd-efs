@@ -1,5 +1,7 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
+use crate::struct_accessors::Getter;
+use crate::struct_accessors::Setter;
 use crate::types::Error;
 use crate::types::LocationMode;
 use crate::types::Result;
@@ -9,8 +11,12 @@ use byteorder::LittleEndian;
 use core::convert::TryInto;
 use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
+use num_derive::ToPrimitive;
+use num_traits::ToPrimitive;
+use crate::struct_accessors::make_accessors;
 use strum_macros::EnumString;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
+//use crate::configs;
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
@@ -43,7 +49,8 @@ pub const EFH_POSITION: [Location; 6] = [
 ];
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[non_exhaustive]
 pub enum SpiReadMode {
 	Normal33_33Mhz = 0b000, // up to 33.33 MHz
 	Dual112 = 0b010,
@@ -56,7 +63,8 @@ pub enum SpiReadMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[non_exhaustive]
 pub enum SpiFastSpeedNew {
 	_66_66MHz = 0,
 	_33_33MHz = 1,
@@ -68,34 +76,60 @@ pub enum SpiFastSpeedNew {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[non_exhaustive]
 pub enum SpiNaplesMicronMode {
 	DummyCycle = 0x0a,
 	DoNothing = 0xff,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-#[repr(C, packed)]
-pub struct EfhNaplesSpiMode {
-	read_mode: u8,      // SpiReadMode or garbage
-	fast_speed_new: u8, // SpiFastSpeedNew or garbage
-	micron_mode: u8,    // SpiNaplesMicronMode or garbage
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+	#[repr(C, packed)]
+	pub struct EfhNaplesSpiMode {
+		read_mode: u8 : pub get Result<SpiReadMode> : pub set SpiReadMode,
+		fast_speed_new: u8 : pub get Result<SpiFastSpeedNew> : pub set SpiFastSpeedNew,
+		micron_mode: u8 : pub get Result<SpiNaplesMicronMode> : pub set SpiNaplesMicronMode,
+	}
+}
+
+impl Default for EfhNaplesSpiMode {
+	fn default() -> Self {
+		Self {
+			read_mode: 0xff,
+			fast_speed_new: 0xff,
+			micron_mode: 0xff,
+		}
+	}
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[non_exhaustive]
 pub enum SpiRomeMicronMode {
 	RomeSupportMicron = 0x55,
 	RomeForceMicron = 0xaa,
 	DoNothing = 0xff,
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-#[repr(C, packed)]
-pub struct EfhRomeSpiMode {
-	read_mode: u8,      // SpiReadMode or garbage
-	fast_speed_new: u8, // SpiFastSpeedNew or garbage
-	micron_mode: u8,    // SpiRomeMicronMode or garbage
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+	#[repr(C, packed)]
+	pub struct EfhRomeSpiMode {
+		read_mode: u8 : pub get Result<SpiReadMode> : pub set SpiReadMode,
+		fast_speed_new: u8 : pub get Result<SpiFastSpeedNew> : pub set SpiFastSpeedNew,
+		micron_mode: u8 : pub get Result<SpiRomeMicronMode> : pub set SpiRomeMicronMode,
+	}
+}
+
+impl Default for EfhRomeSpiMode {
+	fn default() -> Self {
+		Self {
+			read_mode: 0xff,
+			fast_speed_new: 0xff,
+			micron_mode: 0xff,
+		}
+	}
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
@@ -139,23 +173,16 @@ impl Default for Efh {
 				.into(),
 			_padding2: [0xffff_ffff.into(); 2],
 			_reserved: [0xff; 3],
-			spi_mode_zen_naples: EfhNaplesSpiMode {
-				read_mode: 0xff,
-				fast_speed_new: 0xff,
-				micron_mode: 0xff,
-			},
-			spi_mode_zen_rome: EfhRomeSpiMode {
-				read_mode: 0xff,
-				fast_speed_new: 0xff,
-				micron_mode: 0xff,
-			},
+			spi_mode_zen_naples: EfhNaplesSpiMode::default(),
+			spi_mode_zen_rome: EfhRomeSpiMode::default(),
 			_reserved2: 0,
 		}
 	}
 }
 
 #[repr(i8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString, serde::Deserialize, serde::Serialize)]
+#[non_exhaustive]
 pub enum ProcessorGeneration {
 	Naples = -1,
 	Rome = 0,
@@ -243,7 +270,7 @@ impl Efh {
 	}
 }
 
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 pub enum AddressMode {
 	PhysicalAddress = 0,
 	EfsRelativeOffset = 1,       // x
@@ -394,8 +421,9 @@ impl core::fmt::Debug for PspDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 #[bits = 8]
+#[non_exhaustive]
 pub enum PspDirectoryEntryType {
 	AmdPublicKey = 0x00,
 	PspBootloader = 0x01,
@@ -481,13 +509,13 @@ pub enum PspDirectoryEntryType {
 }
 
 /// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 pub enum PspSoftFuseChain32MiBSpiDecoding {
 	LowerHalf = 0,
 	UpperHalf = 1,
 }
 
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 pub enum PspSoftFuseChainPostCodeDecoding {
 	Lpc = 0,
 	Espi = 1,
@@ -712,8 +740,9 @@ impl core::fmt::Debug for BhdDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 #[bits = 8]
+#[non_exhaustive]
 pub enum BhdDirectoryEntryType {
 	OemPublicKey = 0x05,
 	CryptographicSignature = 0x07,
@@ -733,8 +762,9 @@ pub enum BhdDirectoryEntryType {
 	SecondLevelDirectory = 0x70, // also a BhdDirectory
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier)]
+#[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 #[bits = 8]
+#[non_exhaustive]
 pub enum BhdDirectoryEntryRegionType {
 	Normal = 0,
 	Ta1 = 1,
