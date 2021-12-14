@@ -480,7 +480,7 @@ pub enum PspDirectoryEntryType {
 	MpmSecurityDriver = 0x89,
 }
 
-/// For 32 MiB SPI Flash, which half ot map to MMIO 0xff00_0000.
+/// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
 pub enum PspSoftFuseChain32MiBSpiDecoding {
 	LowerHalf = 0,
