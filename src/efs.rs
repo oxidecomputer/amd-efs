@@ -49,7 +49,7 @@ impl<
 		if self.index < self.total_entries {
 			let mut buf: [u8; ERASABLE_BLOCK_SIZE] =
 				[0xff; ERASABLE_BLOCK_SIZE];
-			let buf = &mut buf[..size_of::<Item>()];
+			let buf = &mut buf[.. size_of::<Item>()];
 			self.storage.read_exact(self.beginning, buf).ok()?;
 			// FIXME: range check so we don't fall off the end!
 			let result = header_from_collection::<Item>(buf)?; // TODO: Check for errors
@@ -132,13 +132,13 @@ impl<
 			[0xff; ERASABLE_BLOCK_SIZE];
 		storage.read_exact(location, &mut buf)?;
 		match header_from_collection::<MainHeader>(
-			&buf[..size_of::<MainHeader>()],
+			&buf[.. size_of::<MainHeader>()],
 		) {
 			Some(header) => {
 				let cookie = header.cookie();
-				if cookie == *b"$PSP"
-					|| cookie == *b"$PL2" || cookie == *b"$BHD"
-					|| cookie == *b"$BL2"
+				if cookie == *b"$PSP" ||
+					cookie == *b"$PL2" || cookie == *b"$BHD" ||
+					cookie == *b"$BL2"
 				{
 					let contents_base = DirectoryAdditionalInfo::try_from_unit(
 						header.additional_info().base_address(),
@@ -184,8 +184,8 @@ impl<
 				*item = MainHeader::default();
 				item.set_cookie(cookie);
 				// Note: It is valid that ERASABLE_BLOCK_SIZE <= SPI_BLOCK_SIZE.
-				if Self::SPI_BLOCK_SIZE % ERASABLE_BLOCK_SIZE
-					!= 0
+				if Self::SPI_BLOCK_SIZE % ERASABLE_BLOCK_SIZE !=
+					0
 				{
 					return Err(Error::DirectoryRangeCheck);
 				}
@@ -264,7 +264,7 @@ impl<
 			}
 			assert!(count % 2 == 0);
 			assert!(count as usize >= skip);
-			let block = &buf[skip..count as usize].chunks(2).map(
+			let block = &buf[skip .. count as usize].chunks(2).map(
 				|bytes| {
 					u16::from_le_bytes(
 						bytes.try_into().unwrap(),
@@ -293,7 +293,7 @@ impl<
 		)?;
 		// Write main header--and at least the directory entries that are "in the way"
 		match header_from_collection_mut::<MainHeader>(
-			&mut buf[..size_of::<MainHeader>()],
+			&mut buf[.. size_of::<MainHeader>()],
 		) {
 			Some(item) => {
 				self.header.set_total_entries(total_entries); // Note: reverted on error--see below
@@ -384,8 +384,8 @@ impl<
 			};
 			match entry.source() {
 				ValueOrLocation::Location(x) => {
-					if x >= contents_beginning
-						&& x + size <= contents_end
+					if x >= contents_beginning &&
+						x + size <= contents_end
 					{
 						let new_frontier = x + size; // FIXME bounds check
 						if new_frontier > frontier {
@@ -414,8 +414,8 @@ impl<
 	) -> Result<()> {
 		let mut buf: [u8; ERASABLE_BLOCK_SIZE] =
 			[0xFF; ERASABLE_BLOCK_SIZE];
-		let buf_index = (directory_entry_position as usize)
-			% ERASABLE_BLOCK_SIZE;
+		let buf_index = (directory_entry_position as usize) %
+			ERASABLE_BLOCK_SIZE;
 		let beginning =
 			directory_entry_position - (buf_index as Location); // align
 		let beginning =
@@ -423,7 +423,7 @@ impl<
 		self.storage.read_erasable_block(beginning, &mut buf)?;
 		// FIXME: what if this straddles two different blocks?
 		match header_from_collection_mut::<Item>(
-			&mut buf[buf_index..buf_index + size_of::<Item>()],
+			&mut buf[buf_index .. buf_index + size_of::<Item>()],
 		) {
 			Some(item) => {
 				*item = *entry;
@@ -450,8 +450,8 @@ impl<
 			.total_entries()
 			.checked_add(1)
 			.ok_or(Error::DirectoryRangeCheck)?;
-		if Self::minimal_directory_headers_size(total_entries)?
-			<= self.directory_headers_size
+		if Self::minimal_directory_headers_size(total_entries)? <=
+			self.directory_headers_size
 		{
 			// there's still space for the directory entry
 			let result: Option<
@@ -489,8 +489,8 @@ impl<
 			}
 			let location: Location = self.location.into();
 			self.write_directory_entry(
-				location
-					+ Self::minimal_directory_headers_size(
+				location +
+					Self::minimal_directory_headers_size(
 						self.header.total_entries(),
 					)?,
 				&entry,
@@ -521,10 +521,10 @@ impl<
 		let contents_beginning =
 			Location::from(self.contents_beginning());
 		let contents_end = Location::from(self.contents_end());
-		let payload_meant_inside_contents =
-			Location::from(payload_position) >= contents_beginning
-				&& Location::from(payload_position)
-					<= contents_end;
+		let payload_meant_inside_contents = Location::from(
+			payload_position,
+		) >= contents_beginning &&
+			Location::from(payload_position) <= contents_end;
 		let mut padding = false;
 		while remaining_size > 0 {
 			let count = if padding {
@@ -542,7 +542,7 @@ impl<
 			};
 			// pad with 0xFF
 			if count < buf.len() {
-				for i in count..buf.len() {
+				for i in count .. buf.len() {
 					buf[i] = 0xFF;
 				}
 			}
@@ -551,8 +551,8 @@ impl<
 			let end = (Location::from(payload_position) as usize)
 				.checked_add(count)
 				.ok_or(Error::DirectoryPayloadRangeCheck)?;
-			if payload_meant_inside_contents
-				&& end > contents_end as usize
+			if payload_meant_inside_contents &&
+				end > contents_end as usize
 			{
 				return Err(Error::DirectoryPayloadRangeCheck);
 			}
@@ -886,9 +886,9 @@ impl<
 			match header_from_collection::<Efh>(&xbuf[..]) {
 				Some(item) => {
 					// Note: only one Efh with second_gen_efs()==true allowed in entire Flash!
-					if item.signature.get() == 0x55AA55AA
-						&& item.second_gen_efs()
-						&& match processor_generation {
+					if item.signature.get() == 0x55AA55AA &&
+						item.second_gen_efs() &&
+						match processor_generation {
 							Some(x) => item
 								.compatible_with_processor_generation(
 									x,
@@ -912,9 +912,9 @@ impl<
 			storage.read_exact(*position, &mut xbuf)?;
 			match header_from_collection::<Efh>(&xbuf[..]) {
 				Some(item) => {
-					if item.signature.get() == 0x55AA55AA
-						&& !item.second_gen_efs()
-						&& match processor_generation {
+					if item.signature.get() == 0x55AA55AA &&
+						!item.second_gen_efs() &&
+						match processor_generation {
 							//Some(x) => item.compatible_with_processor_generation(x),
 							None => true,
 							_ => false,
@@ -1025,8 +1025,8 @@ impl<
 					addr & 0x00ff_ffff
 				}
 			};
-			if psp_directory_table_location == 0xffff_ffff
-				|| psp_directory_table_location == 0
+			if psp_directory_table_location == 0xffff_ffff ||
+				psp_directory_table_location == 0
 			{
 				Err(Error::PspDirectoryHeaderNotFound)
 			} else {

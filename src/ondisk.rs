@@ -220,8 +220,8 @@ impl Efh {
 			generation => {
 				let generation: u8 = generation as u8;
 				assert!(generation < 16);
-				self.second_gen_efs.get() & (1 << generation)
-					== 0
+				self.second_gen_efs.get() & (1 << generation) ==
+					0
 			}
 		}
 	}
