@@ -3,15 +3,14 @@ pub enum Error {
 	Io(amd_flash::Error),
 	EfsHeaderNotFound,
 	PspDirectoryHeaderNotFound,
-	PspDirectoryEntryTypeMismatch,
 	BhdDirectoryHeaderNotFound,
-	BhdDirectoryEntryTypeMismatch,
 	DirectoryRangeCheck,
 	DirectoryPayloadRangeCheck,
 	Marshal,
 	Overlap,
 	Duplicate,
 	Misaligned,
+	EntryTypeMismatch,
 }
 
 pub type Result<Q> = core::result::Result<Q, Error>;

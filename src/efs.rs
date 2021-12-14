@@ -653,7 +653,7 @@ impl<
 			&PspDirectoryEntry::new_value(attrs, value),
 		)? {
 			None => Ok(()),
-			_ => Err(Error::PspDirectoryEntryTypeMismatch),
+			_ => Err(Error::EntryTypeMismatch),
 		}
 	}
 
@@ -676,7 +676,7 @@ impl<
 			)?,
 		)?;
 		match xpayload_position {
-			None => Err(Error::PspDirectoryEntryTypeMismatch),
+			None => Err(Error::EntryTypeMismatch),
 			Some(pos) => {
 				self.add_payload(
 					pos,
@@ -774,7 +774,7 @@ impl<
 			ram_destination_address,
 		)? {
 			None => Ok(()),
-			_ => Err(Error::BhdDirectoryEntryTypeMismatch),
+			_ => Err(Error::EntryTypeMismatch),
 		}
 	}
 
@@ -799,7 +799,7 @@ impl<
 			)?,
 		)?;
 		match xpayload_position {
-			None => Err(Error::BhdDirectoryEntryTypeMismatch),
+			None => Err(Error::EntryTypeMismatch),
 			Some(pos) => {
 				self.add_payload(
 					pos,
@@ -1060,7 +1060,7 @@ impl<
 						) => {
 							if psp_directory_table_location >= 0x1_0000_0000 {
 								return Err(
-									Error::PspDirectoryEntryTypeMismatch,
+									Error::EntryTypeMismatch,
 								);
 							} else {
 								let directory = PspDirectory::load(
@@ -1075,7 +1075,7 @@ impl<
 								return Ok(directory);
 							}
 						}
-						_ => return Err(Error::PspDirectoryEntryTypeMismatch),
+						_ => return Err(Error::EntryTypeMismatch),
 					}
 				}
 				_ => { // maybe just unknown entry type.

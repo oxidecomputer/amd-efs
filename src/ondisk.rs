@@ -617,7 +617,7 @@ impl PspDirectoryEntry {
 	pub fn type_or_err(&self) -> Result<PspDirectoryEntryType> {
 		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.type__or_err()
-			.map_err(|_| Error::PspDirectoryEntryTypeMismatch)
+			.map_err(|_| Error::EntryTypeMismatch)
 	}
 	pub fn sub_program(&self) -> u8 {
 		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
@@ -640,7 +640,7 @@ impl PspDirectoryEntry {
 		source: Location,
 	) -> Result<Self> {
 		if size == Self::SIZE_VALUE_MARKER {
-			Err(Error::PspDirectoryEntryTypeMismatch)
+			Err(Error::EntryTypeMismatch)
 		} else {
 			Ok(Self {
 				attrs: u32::from(*attrs).into(),
@@ -668,12 +668,12 @@ impl DirectoryEntry for PspDirectoryEntry {
 					self.source.set(v);
 					Ok(())
 				} else {
-					Err(Error::PspDirectoryEntryTypeMismatch)
+					Err(Error::EntryTypeMismatch)
 				}
 			}
 			ValueOrLocation::Location(v) => {
 				if self.size.get() == Self::SIZE_VALUE_MARKER {
-					Err(Error::PspDirectoryEntryTypeMismatch)
+					Err(Error::EntryTypeMismatch)
 				} else {
 					self.source.set(v);
 					Ok(())
@@ -844,7 +844,7 @@ impl BhdDirectoryEntry {
 	pub fn type_or_err(&self) -> Result<BhdDirectoryEntryType> {
 		let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.type__or_err()
-			.map_err(|_| Error::PspDirectoryEntryTypeMismatch)
+			.map_err(|_| Error::EntryTypeMismatch)
 	}
 
 	pub fn region_type(&self) -> BhdDirectoryEntryRegionType {
@@ -911,7 +911,7 @@ impl BhdDirectoryEntry {
 		destination_location: Option<u64>,
 	) -> Result<Self> {
 		if size == Self::SIZE_VALUE_MARKER {
-			Err(Error::BhdDirectoryEntryTypeMismatch)
+			Err(Error::EntryTypeMismatch)
 		} else {
 			Ok(Self {
 				attrs: u32::from(*attrs).into(),
@@ -921,7 +921,7 @@ impl BhdDirectoryEntry {
 					None => Self::DESTINATION_NONE_MARKER,
 					Some(x) => {
 						if x == Self::DESTINATION_NONE_MARKER {
-							return Err(Error::BhdDirectoryEntryTypeMismatch);
+							return Err(Error::EntryTypeMismatch);
 						}
 						x
 					}
@@ -950,12 +950,12 @@ impl DirectoryEntry for BhdDirectoryEntry {
 					self.source.set(v);
 					Ok(())
 				} else {
-					Err(Error::BhdDirectoryEntryTypeMismatch)
+					Err(Error::EntryTypeMismatch)
 				}
 			}
 			ValueOrLocation::Location(v) => {
 				if self.size.get() == Self::SIZE_VALUE_MARKER {
-					Err(Error::BhdDirectoryEntryTypeMismatch)
+					Err(Error::EntryTypeMismatch)
 				} else {
 					self.source.set(v);
 					Ok(())
