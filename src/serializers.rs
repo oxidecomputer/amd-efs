@@ -1,5 +1,5 @@
 // This file contains the serializers for the ondisk formats.  These are meant to deserialize from a nice simple user-visible type and serialize into the nice simple user-visible type (can be lossy!).
-// That means that serialization can fail (if the nice simple user-visible type cannot represent what we are doing)
+// Also, serialization can fail if the nice simple user-visible type cannot represent what we are doing.
 
 use crate::ondisk::*;
 use core::convert::TryInto;
