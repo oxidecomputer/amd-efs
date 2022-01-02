@@ -314,9 +314,9 @@ impl DummyErrorChecks for AddressMode {
 
 /// XXX: If I move this to struct_accessors, it doesn't work anymore.
 
-/// Since modular_bitfield has a lot of the things already, provide similar
-/// macro which doesn't generate any of the setters or getters.  Instead, it
-/// just defines the user-friendly "Serde"* struct.
+/// Since modular_bitfield has a lot of the things already, provide a macro
+/// similar to make_accessors, but which doesn't generate any of the setters
+/// or getters.  Instead, it just defines the user-friendly "Serde"* struct.
 macro_rules! make_bitfield_serde {(
         $(#[$struct_meta:meta])*
         $struct_vis:vis
@@ -340,6 +340,7 @@ macro_rules! make_bitfield_serde {(
 
 	paste::paste! {
 		#[derive(serde::Deserialize, serde::Serialize)]
+		//#[serde(remote = "" $StructName)]
 		pub(crate) struct [<Serde $StructName>] {
 			$(
 				$(
