@@ -867,23 +867,25 @@ pub enum BhdDirectoryEntryRegionType {
 	Ta2 = 2,
 }
 
-#[bitfield(bits = 32)]
-#[repr(u32)]
-#[derive(Copy, Clone, Debug)]
-pub struct BhdDirectoryEntryAttrs {
-	#[bits = 8]
-	pub type_: BhdDirectoryEntryType,
-	#[bits = 8]
-	pub region_type: BhdDirectoryEntryRegionType,
-	pub reset_image: bool,
-	pub copy_image: bool,
-	pub read_only: bool, // only useful for region_type > 0
-	pub compressed: bool,
-	pub instance: B4,
-	pub sub_program: B3, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
-	pub rom_id: B2,
-	#[skip]
-	__: B3,
+make_bitfield_serde! {
+	#[bitfield(bits = 32)]
+	#[repr(u32)]
+	#[derive(Copy, Clone, Debug)]
+	pub struct BhdDirectoryEntryAttrs {
+		#[bits = 8]
+		pub type_: BhdDirectoryEntryType : pub get BhdDirectoryEntryType : pub set BhdDirectoryEntryType,
+		#[bits = 8]
+		pub region_type: BhdDirectoryEntryRegionType : pub get BhdDirectoryEntryRegionType : pub set BhdDirectoryEntryRegionType,
+		pub reset_image: bool : pub get bool : pub set bool,
+		pub copy_image: bool : pub get bool : pub set bool,
+		pub read_only: bool : pub get bool : pub set bool, // only useful for region_type > 0
+		pub compressed: bool : pub get bool : pub set bool,
+		pub instance: B4 : pub get u8 : pub set u8, // TODO: Shrink setter.
+		pub sub_program: B3, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
+		pub rom_id: B2 : pub get u8 : pub set u8, // TODO: Shrink setter.
+		#[skip]
+		__: B3,
+	}
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
