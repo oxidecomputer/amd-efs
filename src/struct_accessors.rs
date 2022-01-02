@@ -6,6 +6,10 @@ use byteorder::LittleEndian;
 use num_traits::{FromPrimitive, ToPrimitive};
 use zerocopy::{AsBytes, FromBytes, U16, U32, U64};
 
+//pub(crate) trait SerdeRemote {
+//    type Config;
+//}
+
 pub(crate) trait Getter<T> {
 	fn get1(self) -> T;
 }
@@ -126,10 +130,31 @@ impl Setter<bool> for BLU16 {
 	}
 }
 
+/// Since primitive types are not a Result, this just wraps them into a Result.
+/// The reason this exists is because our macros don't know whether or not
+/// the getters return Result--but they have to be able to call map_err
+/// on it in case these DO return Result.
+pub(crate) trait DummyErrorChecks : Sized {
+	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
+	where O: Fn(Self) -> F;
+}
+
+impl DummyErrorChecks for u16 {
+	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
+	where O: Fn(Self) -> F, {
+		Ok(self)
+	}
+}
+
 /// This macro expects a struct as a parameter (attributes are fine) and then,
-/// first, defines the exact same struct. Afterwards, it automatically impl
-/// getters (and setters) for the fields where there was "get" (and "set")
-/// specified.  The getters and setters so generated are hardcoded as calling
+/// first, defines the exact same struct, and also a more user-friendly struct
+/// (name starts with "Serde") that can be used for serde (note: if you want
+/// to use it for that, you still have to impl Serialize and Deserialize for
+/// the former manually--forwarding to the respective "Serde" struct--which
+/// does have "Serialize" and "Deserialize" implemented).
+/// Afterwards, it automatically impls getters (and setters) for the fields
+/// where there was "get" (and maybe "set") specified.
+/// The getters and setters so generated are hardcoded as calling
 /// self.field.get1 and self.field.set1, respectively.  These are usually
 /// provided by a Getter and Getter trait impl (for example the ones in the same
 /// file this macro is in) Note: If you want to add a docstring, put it before
@@ -188,6 +213,7 @@ macro_rules! make_accessors {(
 	// for serde
 	paste::paste!{
 		#[derive(serde::Serialize, serde::Deserialize)]
+		//#[serde(remote = "" $StructName)]
 		pub(crate) struct [<Serde $StructName>] {
 			$(
 				$($(

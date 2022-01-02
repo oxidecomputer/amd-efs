@@ -3,8 +3,10 @@
 
 use crate::ondisk::*;
 use core::convert::TryInto;
+use crate::ondisk::SerdeDirectoryAdditionalInfo;
+use crate::struct_accessors::DummyErrorChecks;
 
-// Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed, if those have a public setter.
+// Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
 macro_rules! make_serde{($StructName:ident, [$($field_name:ident),* $(,)?]
 ) => (
 	paste::paste!{
@@ -49,3 +51,5 @@ make_serde!(
 		spi_mode_zen_rome
 	]
 );
+
+make_serde!(DirectoryAdditionalInfo, [base_address, address_mode, max_size]);

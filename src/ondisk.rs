@@ -14,6 +14,7 @@ use num_traits::ToPrimitive;
 use crate::struct_accessors::make_accessors;
 use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
+use crate::struct_accessors::DummyErrorChecks;
 use strum_macros::EnumString;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 //use crate::configs;
@@ -304,18 +305,71 @@ pub enum AddressMode {
 	ImageBaseRelativeOffset = 3, // x; ImageBaseRelativeOffset == DirectoryRelativeOffset; not Base
 }
 
-#[bitfield(bits = 32)]
-#[repr(u32)]
-#[derive(Copy, Clone, Debug)]
-pub struct DirectoryAdditionalInfo {
-	pub max_size: B10, // directory size in 4 kiB; Note: doc error in AMD docs
-	#[skip(getters, setters)]
-	spi_block_size: B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
-	pub base_address: B15, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
-	#[bits = 2]
-	pub address_mode: AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
-	#[skip]
-	__: bool,
+impl DummyErrorChecks for AddressMode {
+	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
+	where O: Fn(Self) -> F {
+		Ok(self)
+	}
+}
+
+/// XXX: If I move this to struct_accessors, it doesn't work anymore.
+
+/// Since modular_bitfield has a lot of the things already, provide similar
+/// macro which doesn't generate any of the setters or getters.  Instead, it
+/// just defines the user-friendly "Serde"* struct.
+macro_rules! make_bitfield_serde {(
+        $(#[$struct_meta:meta])*
+        $struct_vis:vis
+        struct $StructName:ident {
+                $(
+                        $(#[$field_meta:meta])*
+                        $field_vis:vis
+                        $field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
+                ),* $(,)?
+        }
+) => {
+	$(#[$struct_meta])*
+	$struct_vis
+	struct $StructName {
+		$(
+			$(#[$field_meta])*
+			$field_vis
+			$field_name : $field_ty,
+		)*
+	}
+
+	paste::paste! {
+		#[derive(serde::Deserialize, serde::Serialize)]
+		pub(crate) struct [<Serde $StructName>] {
+			$(
+				$(
+					pub(crate) $field_name : $field_user_ty,
+				)?
+			)*
+		}
+	}
+}}
+
+make_bitfield_serde! {
+	#[bitfield(bits = 32)]
+	#[repr(u32)]
+	#[derive(Copy, Clone, Debug)]
+	pub struct DirectoryAdditionalInfo {
+		pub max_size: B10 : pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs
+		#[skip(getters, setters)]
+		spi_block_size: B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
+		pub base_address: B15 : pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
+		#[bits = 2]
+		pub address_mode: AddressMode : pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
+		#[skip]
+		__: bool,
+	}
+}
+
+impl Default for DirectoryAdditionalInfo {
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl DirectoryAdditionalInfo {
@@ -328,6 +382,16 @@ impl DirectoryAdditionalInfo {
 		result.set_spi_block_size_checked(value)?;
 		Ok(result)
 	}
+/*
+	pub fn with_spi_block_size(
+		&mut self,
+		value: u16,
+	) -> Self {
+		let mut result = *self;
+		result.set_spi_block_size_checked(value).unwrap(); // FIXME
+		result
+	}
+*/
 	pub fn spi_block_size_or_err(
 		&self,
 	) -> core::result::Result<
