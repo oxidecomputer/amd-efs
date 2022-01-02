@@ -2,8 +2,6 @@
 // Also, serialization can fail if the nice simple user-visible type cannot represent what we are doing.
 
 use crate::ondisk::*;
-use core::convert::TryInto;
-use crate::ondisk::SerdeDirectoryAdditionalInfo;
 use crate::struct_accessors::DummyErrorChecks;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
@@ -53,3 +51,32 @@ make_serde!(
 );
 
 make_serde!(DirectoryAdditionalInfo, [base_address, address_mode, max_size]);
+make_serde!(PspSoftFuseChain, [
+	secure_debug_unlock,
+	early_secure_debug_unlock,
+	unlock_token_in_nvram,
+	force_security_policy_loading_even_if_insecure,
+	load_diagnostic_bootloader,
+	disable_psp_debug_prints,
+	spi_decoding,
+	postcode_decoding,
+	skip_mp2_firmware_loading,
+	postcode_output_control_1byte,
+	force_recovery_booting
+]);
+make_serde!(PspDirectoryEntryAttrs, [
+	type_,
+	sub_program,
+	rom_id
+]);
+make_serde!(BhdDirectoryEntryAttrs, [
+	type_,
+	region_type,
+	reset_image,
+	copy_image,
+	read_only,
+	compressed,
+	instance,
+	sub_program,
+	rom_id
+]);

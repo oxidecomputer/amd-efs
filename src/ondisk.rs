@@ -306,10 +306,6 @@ pub enum AddressMode {
 }
 
 impl DummyErrorChecks for AddressMode {
-	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
-	where O: Fn(Self) -> F {
-		Ok(self)
-	}
 }
 
 /// XXX: If I move this to struct_accessors, it doesn't work anymore.
@@ -599,12 +595,18 @@ pub enum PspDirectoryEntryType {
 	MpmSecurityDriver = 0x89,
 }
 
+impl DummyErrorChecks for PspDirectoryEntryType {
+}
+
 /// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 #[bits = 1]
 pub enum PspSoftFuseChain32MiBSpiDecoding {
 	LowerHalf = 0,
 	UpperHalf = 1,
+}
+
+impl DummyErrorChecks for PspSoftFuseChain32MiBSpiDecoding {
 }
 
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
@@ -614,6 +616,9 @@ pub enum PspSoftFuseChainPostCodeDecoding {
 	Espi = 1,
 }
 
+impl DummyErrorChecks for PspSoftFuseChainPostCodeDecoding {
+}
+
 make_bitfield_serde! {
 	#[bitfield(bits = 64)]
 	#[repr(u64)]
@@ -621,7 +626,7 @@ make_bitfield_serde! {
 	pub struct PspSoftFuseChain {
 		pub secure_debug_unlock: bool : pub get bool : pub set bool,
 		#[skip]
-		__: bool : pub get bool : pub set bool,
+		__: bool,
 		pub early_secure_debug_unlock: bool : pub get bool : pub set bool,
 		pub unlock_token_in_nvram: bool : pub get bool : pub set bool, // if the unlock token has been stored (by us) into NVRAM
 		pub force_security_policy_loading_even_if_insecure: bool : pub get bool : pub set bool,
@@ -629,8 +634,8 @@ make_bitfield_serde! {
 		pub disable_psp_debug_prints: bool : pub get bool : pub set bool,
 		#[skip]
 		__: B7,
-		pub spi_decoding: PspSoftFuseChain32MiBSpiDecoding : pub get bool : pub set bool,
-		pub postcode_decoding: PspSoftFuseChainPostCodeDecoding : pub get bool : pub set bool,
+		pub spi_decoding: PspSoftFuseChain32MiBSpiDecoding : pub get PspSoftFuseChain32MiBSpiDecoding : pub set PspSoftFuseChain32MiBSpiDecoding,
+		pub postcode_decoding: PspSoftFuseChainPostCodeDecoding : pub get PspSoftFuseChainPostCodeDecoding : pub set PspSoftFuseChainPostCodeDecoding,
 		#[skip]
 		__: B12,
 		#[skip]
@@ -640,6 +645,12 @@ make_bitfield_serde! {
 		pub force_recovery_booting: bool : pub get bool : pub set bool,
 		#[skip]
 		__: B32,
+	}
+}
+
+impl Default for PspSoftFuseChain {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
@@ -654,6 +665,12 @@ make_bitfield_serde! {
 		pub rom_id: B2 : pub get u8 : pub set u8,      // romid // TODO: Shrink setter.
 		#[skip]
 		__: B14,
+	}
+}
+
+impl Default for PspDirectoryEntryAttrs {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
@@ -859,6 +876,9 @@ pub enum BhdDirectoryEntryType {
 	SecondLevelDirectory = 0x70, // also a BhdDirectory
 }
 
+impl DummyErrorChecks for BhdDirectoryEntryType {
+}
+
 #[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 #[bits = 8]
 #[non_exhaustive]
@@ -866,6 +886,9 @@ pub enum BhdDirectoryEntryRegionType {
 	Normal = 0,
 	Ta1 = 1,
 	Ta2 = 2,
+}
+
+impl DummyErrorChecks for BhdDirectoryEntryRegionType {
 }
 
 make_bitfield_serde! {
@@ -882,10 +905,16 @@ make_bitfield_serde! {
 		pub read_only: bool : pub get bool : pub set bool, // only useful for region_type > 0
 		pub compressed: bool : pub get bool : pub set bool,
 		pub instance: B4 : pub get u8 : pub set u8, // TODO: Shrink setter.
-		pub sub_program: B3, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
+		pub sub_program: B3 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
 		pub rom_id: B2 : pub get u8 : pub set u8, // TODO: Shrink setter.
 		#[skip]
 		__: B3,
+	}
+}
+
+impl Default for BhdDirectoryEntryAttrs {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
