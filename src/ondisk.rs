@@ -355,10 +355,10 @@ make_bitfield_serde! {
 	#[repr(u32)]
 	#[derive(Copy, Clone, Debug)]
 	pub struct DirectoryAdditionalInfo {
-		pub max_size: B10 : pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs
+		pub max_size: B10 : pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs // TODO: Shrink setter.
 		#[skip(getters, setters)]
 		spi_block_size: B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
-		pub base_address: B15 : pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.
+		pub base_address: B15 : pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.  // TODO: Shrink setter.
 		#[bits = 2]
 		pub address_mode: AddressMode : pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
 		#[skip]
@@ -650,7 +650,7 @@ make_bitfield_serde! {
 		#[bits = 8]
 		pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
 		pub sub_program: B8 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
-		pub rom_id: B2 : pub get u8 : pub set u8,      // romid
+		pub rom_id: B2 : pub get u8 : pub set u8,      // romid // TODO: Shrink setter.
 		#[skip]
 		__: B14,
 	}
