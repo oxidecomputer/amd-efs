@@ -613,31 +613,33 @@ pub enum PspSoftFuseChainPostCodeDecoding {
 	Espi = 1,
 }
 
-#[bitfield(bits = 64)]
-#[repr(u64)]
-#[derive(Copy, Clone, Debug)]
-pub struct PspSoftFuseChain {
-	pub secure_debug_unlock: bool,
-	#[skip]
-	__: bool,
-	pub early_secure_debug_unlock: bool,
-	pub unlock_token_in_nvram: bool, // if the unlock token has been stored (by us) into NVRAM
-	pub force_security_policy_loading_even_if_insecure: bool,
-	pub load_diagnostic_bootloader: bool,
-	pub disable_psp_debug_prints: bool,
-	#[skip]
-	__: B7,
-	pub spi_decoding: PspSoftFuseChain32MiBSpiDecoding,
-	pub postcode_decoding: PspSoftFuseChainPostCodeDecoding,
-	#[skip]
-	__: B12,
-	#[skip]
-	__: bool,
-	pub skip_mp2_firmware_loading: bool,
-	pub postcode_output_control_1byte: bool, // ???
-	pub force_recovery_booting: bool,
-	#[skip]
-	__: B32,
+make_bitfield_serde! {
+	#[bitfield(bits = 64)]
+	#[repr(u64)]
+	#[derive(Copy, Clone, Debug)]
+	pub struct PspSoftFuseChain {
+		pub secure_debug_unlock: bool : pub get bool : pub set bool,
+		#[skip]
+		__: bool : pub get bool : pub set bool,
+		pub early_secure_debug_unlock: bool : pub get bool : pub set bool,
+		pub unlock_token_in_nvram: bool : pub get bool : pub set bool, // if the unlock token has been stored (by us) into NVRAM
+		pub force_security_policy_loading_even_if_insecure: bool : pub get bool : pub set bool,
+		pub load_diagnostic_bootloader: bool : pub get bool : pub set bool,
+		pub disable_psp_debug_prints: bool : pub get bool : pub set bool,
+		#[skip]
+		__: B7,
+		pub spi_decoding: PspSoftFuseChain32MiBSpiDecoding : pub get bool : pub set bool,
+		pub postcode_decoding: PspSoftFuseChainPostCodeDecoding : pub get bool : pub set bool,
+		#[skip]
+		__: B12,
+		#[skip]
+		__: bool,
+		pub skip_mp2_firmware_loading: bool : pub get bool : pub set bool,
+		pub postcode_output_control_1byte: bool : pub get bool : pub set bool, // ???
+		pub force_recovery_booting: bool : pub get bool : pub set bool,
+		#[skip]
+		__: B32,
+	}
 }
 
 #[bitfield(bits = 32)]
