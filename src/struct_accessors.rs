@@ -136,14 +136,18 @@ impl Setter<bool> for BLU16 {
 /// on it in case these DO return Result.
 pub(crate) trait DummyErrorChecks : Sized {
 	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
-	where O: Fn(Self) -> F;
+	where O: Fn(Self) -> F, {
+		Ok(self)
+        }
 }
 
 impl DummyErrorChecks for u16 {
-	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
-	where O: Fn(Self) -> F, {
-		Ok(self)
-	}
+}
+
+impl DummyErrorChecks for u8 {
+}
+
+impl DummyErrorChecks for bool {
 }
 
 /// This macro expects a struct as a parameter (attributes are fine) and then,
