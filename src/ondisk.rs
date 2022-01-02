@@ -642,16 +642,18 @@ make_bitfield_serde! {
 	}
 }
 
-#[bitfield(bits = 32)]
-#[repr(u32)]
-#[derive(Copy, Clone, Debug)]
-pub struct PspDirectoryEntryAttrs {
-	#[bits = 8]
-	pub type_: PspDirectoryEntryType,
-	pub sub_program: B8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
-	pub rom_id: B2,      // romid
-	#[skip]
-	__: B14,
+make_bitfield_serde! {
+	#[bitfield(bits = 32)]
+	#[repr(u32)]
+	#[derive(Copy, Clone, Debug)]
+	pub struct PspDirectoryEntryAttrs {
+		#[bits = 8]
+		pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
+		pub sub_program: B8 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
+		pub rom_id: B2 : pub get u8 : pub set u8,      // romid
+		#[skip]
+		__: B14,
+	}
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
