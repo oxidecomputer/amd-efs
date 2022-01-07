@@ -702,6 +702,12 @@ pub trait DirectoryEntry {
 
 impl PspDirectoryEntry {
 	const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
+	pub fn attrs(&self) -> PspDirectoryEntryAttrs {
+		PspDirectoryEntryAttrs::from(self.attrs.get())
+	}
+	pub fn set_attrs(&mut self, value: PspDirectoryEntryAttrs) {
+		self.attrs.set(value.into())
+	}
 	pub fn type_or_err(&self) -> Result<PspDirectoryEntryType> {
 		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.type__or_err()
@@ -738,57 +744,6 @@ impl PspDirectoryEntry {
 		}
 	}
 }
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub enum SerdePspDirectoryEntryBody {
-  Value(u64),
-  Blob {
-    location: Location,
-    size: u32,
-  }
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct SerdePspDirectoryEntry {
-  pub attrs: PspDirectoryEntryAttrs,
-  pub body: SerdePspDirectoryEntryBody,
-}
-
-impl<'de> serde::de::Deserialize<'de> for PspDirectoryEntry {
-	fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-	where D: serde::de::Deserializer<'de>, {
-		let config = SerdePspDirectoryEntry::deserialize(deserializer)?;
-		match config.body {
-			SerdePspDirectoryEntryBody::Value(x) => {
-				Ok(PspDirectoryEntry::new_value(&config.attrs, x))
-			},
-			SerdePspDirectoryEntryBody::Blob { location, size } => {
-				Ok(PspDirectoryEntry::new_payload(&config.attrs, size, location).unwrap()) // FIXME .map_err(|_| serde::ser::Error::custom("value unknown"))?
-			},
-		}
-	}
-}
-impl serde::Serialize for PspDirectoryEntry {
-	fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-	where S: serde::Serializer, {
-		let source = self.source();
-		SerdePspDirectoryEntry {
-			attrs: PspDirectoryEntryAttrs::from(self.attrs.get()), // .map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
-			body: match source {
-				ValueOrLocation::Value(x) => {
-					SerdePspDirectoryEntryBody::Value(x)
-				},
-				ValueOrLocation::Location(x) => {
-					SerdePspDirectoryEntryBody::Blob {
-						location: x.try_into().unwrap(), // FIXME
-						size: self.size.get(),
-					}
-				},
-			},
-		}.serialize(serializer)
-	}
-}
-
 
 impl DirectoryEntry for PspDirectoryEntry {
 	fn source(&self) -> ValueOrLocation {
@@ -995,6 +950,12 @@ impl Default for BhdDirectoryEntry {
 impl BhdDirectoryEntry {
 	const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
 	const DESTINATION_NONE_MARKER: u64 = 0xffff_ffff_ffff_ffff;
+	pub fn attrs(&self) -> BhdDirectoryEntryAttrs {
+		BhdDirectoryEntryAttrs::from(self.attrs.get())
+	}
+	pub fn set_attrs(&mut self, value: BhdDirectoryEntryAttrs) {
+		self.attrs.set(value.into())
+	}
 	pub fn type_or_err(&self) -> Result<BhdDirectoryEntryType> {
 		let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.type__or_err()
@@ -1083,61 +1044,6 @@ impl BhdDirectoryEntry {
 				.into(),
 			})
 		}
-	}
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub enum SerdeBhdDirectoryEntryBody {
-  Value(u64),
-  Blob {
-    location: Location,
-    size: u32,
-    ram_destination: Option<u64>,
-  }
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct SerdeBhdDirectoryEntry {
-  pub attrs: BhdDirectoryEntryAttrs,
-  pub body: SerdeBhdDirectoryEntryBody,
-}
-
-impl<'de> serde::de::Deserialize<'de> for BhdDirectoryEntry {
-	fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-	where D: serde::de::Deserializer<'de>, {
-		let config = SerdeBhdDirectoryEntry::deserialize(deserializer)?;
-    match config.body {
-      SerdeBhdDirectoryEntryBody::Value(x) => {
-		    Ok(BhdDirectoryEntry::new_value(&config.attrs, x))
-      },
-      SerdeBhdDirectoryEntryBody::Blob { location, size, ram_destination } => {
-	      Ok(BhdDirectoryEntry::new_payload(&config.attrs, size, location, ram_destination).unwrap()) // FIXME .map_err(|_| serde::ser::Error::custom("value unknown"))?
-      },
-    }
-  }
-}
-impl serde::Serialize for BhdDirectoryEntry {
-	fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-	where S: serde::Serializer, {
-		let source = self.source();
-		SerdeBhdDirectoryEntry {
-			attrs: BhdDirectoryEntryAttrs::from(self.attrs.get()), // .map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
-			body: match source {
-				ValueOrLocation::Value(x) => {
-					SerdeBhdDirectoryEntryBody::Value(x)
-				},
-				ValueOrLocation::Location(x) => {
-					SerdeBhdDirectoryEntryBody::Blob {
-						location: x.try_into().unwrap(), // FIXME
-						size: self.size.get(),
-						ram_destination: match self.destination_location.get() {
-							0xffff_ffff_ffff_ffff => None,
-							x => Some(x),
-						},
-					}
-				},
-			},
-		}.serialize(serializer)
 	}
 }
 
