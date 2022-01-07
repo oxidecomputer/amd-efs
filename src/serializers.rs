@@ -1,4 +1,6 @@
-// This file contains the serializers for the ondisk formats.  These are meant to deserialize from a nice simple user-visible type and serialize into the nice simple user-visible type (can be lossy!).
+// This file contains the serializers for the ondisk formats.
+// These are meant automatically make serde use a temporary serde-aware struct as a proxy when serializing/deserializing a non-serde-aware struct.
+// Note that if too many fields are private, it means that those are not in the proxy struct in the first place. This might cause problems.
 // Also, serialization can fail if the nice simple user-visible type cannot represent what we are doing.
 
 use crate::ondisk::*;
