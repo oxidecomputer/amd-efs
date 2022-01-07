@@ -340,7 +340,9 @@ macro_rules! make_bitfield_serde {(
 		pub(crate) struct [<Serde $StructName>] {
 			$(
 				$(
-					pub(crate) $field_name : $field_user_ty,
+					$getter_vis
+					//pub(crate)
+					$field_name : <$field_ty as Specifier>::InOut, // $field_user_ty
 				)?
 			)*
 		}
@@ -355,9 +357,9 @@ make_bitfield_serde! {
 		pub max_size: B10 : pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs // TODO: Shrink setter.
 		#[skip(getters, setters)]
 		spi_block_size: B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
-		pub base_address: B15 : pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where.  // TODO: Shrink setter.
+		pub base_address: B15 : pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where. // TODO: Shrink setter.
 		#[bits = 2]
-		pub address_mode: AddressMode : pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting
+		pub address_mode: AddressMode : pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting // TODO: Shrink setter.
 		#[skip]
 		__: bool,
 	}
@@ -905,7 +907,7 @@ make_bitfield_serde! {
 		pub read_only: bool : pub get bool : pub set bool, // only useful for region_type > 0
 		pub compressed: bool : pub get bool : pub set bool,
 		pub instance: B4 : pub get u8 : pub set u8, // TODO: Shrink setter.
-		pub sub_program: B3 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries
+		pub sub_program: B3 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries // TODO: Shrink setter.
 		pub rom_id: B2 : pub get u8 : pub set u8, // TODO: Shrink setter.
 		#[skip]
 		__: B3,

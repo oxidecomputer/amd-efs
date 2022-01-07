@@ -14,7 +14,7 @@ macro_rules! make_serde{($StructName:ident, [$($field_name:ident),* $(,)?]
 				let config = [<Serde $StructName>]::deserialize(deserializer)?;
 				Ok($StructName::default()
 				$(
-				.[<with_ $field_name>](config.$field_name)
+				.[<with_ $field_name>](config.$field_name.into())
 				)*)
 		        }
 		}
@@ -23,7 +23,7 @@ macro_rules! make_serde{($StructName:ident, [$($field_name:ident),* $(,)?]
 			where S: serde::Serializer, {
 				[<Serde $StructName>] {
 					$(
-						$field_name: self.$field_name().map_err(|_| serde::ser::Error::custom("value unknown"))?,
+						$field_name: self.$field_name().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
 					)*
 				}.serialize(serializer)
 			}
