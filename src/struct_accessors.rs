@@ -219,6 +219,9 @@ macro_rules! make_accessors {(
 	paste::paste!{
 		#[doc(hidden)]
 		#[derive(serde::Serialize, serde::Deserialize)]
+		// Doing remoting automatically would make it impossible for the user to use another one.
+		// Since the config format presumably needs to be
+		// backward-compatible, that wouldn't be such a great idea.
 		//#[serde(remote = "" $StructName)]
 		pub(crate) struct [<Serde $StructName>] {
 			$(
