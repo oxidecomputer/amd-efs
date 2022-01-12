@@ -31,12 +31,6 @@
 * bios_directories: Return Err directly if appropriate
 * Make rom_id more useful?  (maybe not?)
 
-# Naming
-
-* Condensing the names: "Efs" and "Bhd" be treated as opaque acronyms
-  * "Bios" -> "Bhd"
-  * "efs" instead of "embedded_firmware_header"
-
 # Later with Flash
 
 * Cache about 5 flash blocks;  Cache can be transparent to FlashRead, FlashWrite interface
