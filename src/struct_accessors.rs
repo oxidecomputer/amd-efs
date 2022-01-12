@@ -217,6 +217,7 @@ macro_rules! make_accessors {(
 
 	// for serde
 	paste::paste!{
+		#[doc(hidden)]
 		#[derive(serde::Serialize, serde::Deserialize)]
 		//#[serde(remote = "" $StructName)]
 		pub(crate) struct [<Serde $StructName>] {
