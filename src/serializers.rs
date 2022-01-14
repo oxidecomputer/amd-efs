@@ -7,13 +7,13 @@ use crate::ondisk::*;
 use crate::struct_accessors::DummyErrorChecks;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
-macro_rules! make_serde{($StructName:ident, [$($field_name:ident),* $(,)?]
+macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
 ) => (
 	paste::paste!{
 		impl<'de> serde::de::Deserialize<'de> for $StructName {
 			fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
 			where D: serde::de::Deserializer<'de>, {
-				let config = [<Serde $StructName>]::deserialize(deserializer)?;
+				let config = $SerdeStructName::deserialize(deserializer)?;
 				Ok($StructName::default()
 				$(
 				.[<with_ $field_name>](config.$field_name.into())
@@ -23,7 +23,7 @@ macro_rules! make_serde{($StructName:ident, [$($field_name:ident),* $(,)?]
 		impl serde::Serialize for $StructName {
 			fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
 			where S: serde::Serializer, {
-				[<Serde $StructName>] {
+				$SerdeStructName {
 					$(
 						$field_name: self.$field_name().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
 					)*
@@ -33,10 +33,11 @@ macro_rules! make_serde{($StructName:ident, [$($field_name:ident),* $(,)?]
 	}
 )}
 
-make_serde!(EfhNaplesSpiMode, [read_mode, fast_speed_new, micron_mode]);
-make_serde!(EfhRomeSpiMode, [read_mode, fast_speed_new, micron_mode]);
+make_serde!(EfhNaplesSpiMode, SerdeEfhNaplesSpiMode, [read_mode, fast_speed_new, micron_mode]);
+make_serde!(EfhRomeSpiMode, SerdeEfhRomeSpiMode, [read_mode, fast_speed_new, micron_mode]);
 make_serde!(
 	Efh,
+	SerdeEfh,
 	[
 		signature,
 		bhd_directory_table_milan,
@@ -52,8 +53,8 @@ make_serde!(
 	]
 );
 
-make_serde!(DirectoryAdditionalInfo, [base_address, address_mode, max_size]);
-make_serde!(PspSoftFuseChain, [
+make_serde!(DirectoryAdditionalInfo, SerdeDirectoryAdditionalInfo, [base_address, address_mode, max_size]);
+make_serde!(PspSoftFuseChain, SerdePspSoftFuseChain, [
 	secure_debug_unlock,
 	early_secure_debug_unlock,
 	unlock_token_in_nvram,
@@ -66,12 +67,12 @@ make_serde!(PspSoftFuseChain, [
 	postcode_output_control_1byte,
 	force_recovery_booting
 ]);
-make_serde!(PspDirectoryEntryAttrs, [
+make_serde!(PspDirectoryEntryAttrs, SerdePspDirectoryEntryAttrs, [
 	type_,
 	sub_program,
 	rom_id
 ]);
-make_serde!(BhdDirectoryEntryAttrs, [
+make_serde!(BhdDirectoryEntryAttrs, SerdeBhdDirectoryEntryAttrs, [
 	type_,
 	region_type,
 	reset_image,
