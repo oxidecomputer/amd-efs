@@ -67,12 +67,12 @@ make_serde!(PspSoftFuseChain, SerdePspSoftFuseChain, [
 	postcode_output_control_1byte,
 	force_recovery_booting
 ]);
-make_serde!(PspDirectoryEntryAttrs, SerdePspDirectoryEntryAttrs, [
+make_serde!(PspDirectoryEntryAttrs, CustomSerdePspDirectoryEntryAttrs, [
 	type_,
 	sub_program,
 	rom_id
 ]);
-make_serde!(BhdDirectoryEntryAttrs, SerdeBhdDirectoryEntryAttrs, [
+make_serde!(BhdDirectoryEntryAttrs, CustomSerdeBhdDirectoryEntryAttrs, [
 	type_,
 	region_type,
 	reset_image,

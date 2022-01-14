@@ -709,6 +709,20 @@ make_bitfield_serde! {
 	}
 }
 
+fn zero() -> u8 {
+	0
+}
+
+#[doc(hidden)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CustomSerdePspDirectoryEntryAttrs {
+	pub type_: PspDirectoryEntryType,
+	#[serde(default = "zero")]
+	pub sub_program: u8,
+	#[serde(default)]
+	pub rom_id: PspDirectoryRomId,
+}
+
 impl Default for PspDirectoryEntryAttrs {
 	fn default() -> Self {
 		Self::new()
@@ -959,6 +973,22 @@ make_bitfield_serde! {
 		__: B3,
 	}
 }
+
+#[doc(hidden)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CustomSerdeBhdDirectoryEntryAttrs {
+	pub type_: BhdDirectoryEntryType,
+	pub region_type: BhdDirectoryEntryRegionType,
+	pub reset_image: bool,
+	pub copy_image: bool,
+	pub read_only: bool,
+	pub compressed: bool,
+	pub instance: u8,
+	pub sub_program: u8,
+	#[serde(default)]
+	pub rom_id: BhdDirectoryRomId,
+}
+
 
 impl Default for BhdDirectoryEntryAttrs {
 	fn default() -> Self {
