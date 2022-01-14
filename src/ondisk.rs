@@ -992,6 +992,10 @@ fn copy_image_default() -> bool {
 	false
 }
 
+fn compressed_default() -> bool {
+	false
+}
+
 fn instance_default() -> u8 {
 	0
 }
@@ -1012,6 +1016,7 @@ pub struct CustomSerdeBhdDirectoryEntryAttrs {
 	pub copy_image: bool,
 	#[serde(default = "read_only_default")]
 	pub read_only: bool,
+	#[serde(default = "compressed_default")]
 	pub compressed: bool,
 	#[serde(default = "instance_default")]
 	pub instance: u8,
