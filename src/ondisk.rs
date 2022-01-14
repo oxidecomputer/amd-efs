@@ -945,9 +945,15 @@ impl DummyErrorChecks for BhdDirectoryEntryType {
 #[bits = 8]
 #[non_exhaustive]
 pub enum BhdDirectoryEntryRegionType {
-	Normal = 0,
+	Normal = 0, // for X86: always
 	Ta1 = 1,
 	Ta2 = 2,
+}
+
+impl Default for BhdDirectoryEntryRegionType {
+	fn default() -> Self {
+		Self::Normal
+	}
 }
 
 impl DummyErrorChecks for BhdDirectoryEntryRegionType {
@@ -974,21 +980,46 @@ make_bitfield_serde! {
 	}
 }
 
+fn read_only_default() -> bool {
+	false // for X86: the only choice
+}
+
+fn reset_image_default() -> bool {
+	false
+}
+
+fn copy_image_default() -> bool {
+	false
+}
+
+fn instance_default() -> u8 {
+	0
+}
+
+fn sub_program_default() -> u8 {
+	0
+}
+
 #[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CustomSerdeBhdDirectoryEntryAttrs {
 	pub type_: BhdDirectoryEntryType,
+	#[serde(default)]
 	pub region_type: BhdDirectoryEntryRegionType,
+	#[serde(default = "reset_image_default")]
 	pub reset_image: bool,
+	#[serde(default = "copy_image_default")]
 	pub copy_image: bool,
+	#[serde(default = "read_only_default")]
 	pub read_only: bool,
 	pub compressed: bool,
+	#[serde(default = "instance_default")]
 	pub instance: u8,
+	#[serde(default = "sub_program_default")]
 	pub sub_program: u8,
 	#[serde(default)]
 	pub rom_id: BhdDirectoryRomId,
 }
-
 
 impl Default for BhdDirectoryEntryAttrs {
 	fn default() -> Self {
