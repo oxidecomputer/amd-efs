@@ -659,6 +659,42 @@ impl Default for PspSoftFuseChain {
 	}
 }
 
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[bits = 2]
+#[non_exhaustive]
+pub enum PspDirectoryRomId {
+	SpiCs1 = 0,
+	SpiCs2 = 1,
+}
+
+impl DummyErrorChecks for PspDirectoryRomId {
+}
+
+impl Default for PspDirectoryRomId {
+	fn default() -> Self {
+		Self::SpiCs1
+	}
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[bits = 2]
+#[non_exhaustive]
+pub enum BhdDirectoryRomId {
+	SpiCs1 = 0,
+	SpiCs2 = 1,
+}
+
+impl DummyErrorChecks for BhdDirectoryRomId {
+}
+
+impl Default for BhdDirectoryRomId {
+	fn default() -> Self {
+		Self::SpiCs1
+	}
+}
+
 make_bitfield_serde! {
 	#[bitfield(bits = 32)]
 	#[repr(u32)]
@@ -667,7 +703,7 @@ make_bitfield_serde! {
 		#[bits = 8]
 		pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
 		pub sub_program: B8 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
-		pub rom_id: B2 : pub get u8 : pub set u8,      // romid // TODO: Shrink setter.
+		pub rom_id: PspDirectoryRomId : pub get PspDirectoryRomId : pub set PspDirectoryRomId,
 		#[skip]
 		__: B14,
 	}
@@ -720,7 +756,7 @@ impl PspDirectoryEntry {
 		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.sub_program()
 	}
-	pub fn rom_id(&self) -> u8 {
+	pub fn rom_id(&self) -> PspDirectoryRomId {
 		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.rom_id()
 	}
@@ -918,7 +954,7 @@ make_bitfield_serde! {
 		pub compressed: bool : pub get bool : pub set bool,
 		pub instance: B4 : pub get u8 : pub set u8, // TODO: Shrink setter.
 		pub sub_program: B3 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries // TODO: Shrink setter.
-		pub rom_id: B2 : pub get u8 : pub set u8, // TODO: Shrink setter.
+		pub rom_id: BhdDirectoryRomId : pub get BhdDirectoryRomId : pub set BhdDirectoryRomId,
 		#[skip]
 		__: B3,
 	}
@@ -1000,7 +1036,7 @@ impl BhdDirectoryEntry {
 		attrs.sub_program()
 	}
 
-	pub fn rom_id(&self) -> u8 {
+	pub fn rom_id(&self) -> BhdDirectoryRomId {
 		let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
 		attrs.rom_id()
 	}
