@@ -218,7 +218,7 @@ macro_rules! make_accessors {(
 	// for serde
 	paste::paste!{
 		#[doc(hidden)]
-		#[derive(serde::Serialize, serde::Deserialize)]
+		#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 		// Doing remoting automatically would make it impossible for the user to use another one.
 		// Since the config format presumably needs to be
 		// backward-compatible, that wouldn't be such a great idea.

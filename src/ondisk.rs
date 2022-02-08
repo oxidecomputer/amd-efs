@@ -50,7 +50,7 @@ pub const EFH_POSITION: [Location; 6] = [
 ];
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[non_exhaustive]
 pub enum SpiReadMode {
 	Normal33_33Mhz = 0b000, // up to 33.33 MHz
@@ -64,7 +64,7 @@ pub enum SpiReadMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[non_exhaustive]
 pub enum SpiFastSpeedNew {
 	_66_66MHz = 0,
@@ -77,7 +77,7 @@ pub enum SpiFastSpeedNew {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[non_exhaustive]
 pub enum SpiNaplesMicronMode {
 	DummyCycle = 0x0a,
@@ -129,7 +129,7 @@ impl Setter<EfhRomeSpiMode> for EfhRomeSpiMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[non_exhaustive]
 pub enum SpiRomeMicronMode {
 	RomeSupportMicron = 0x55,
@@ -208,7 +208,7 @@ impl Default for Efh {
 }
 
 #[repr(i8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[non_exhaustive]
 pub enum ProcessorGeneration {
 	Naples = -1,
@@ -297,7 +297,7 @@ impl Efh {
 	}
 }
 
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 pub enum AddressMode {
 	/// Only supported for images <= 16 MiB.
 	/// Right-justified in 4 GiB address space.
@@ -338,7 +338,7 @@ macro_rules! make_bitfield_serde {(
 	}
 
 	paste::paste! {
-		#[derive(serde::Deserialize, serde::Serialize)]
+		#[derive(serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 		//#[serde(remote = "" $StructName)]
 		pub(crate) struct [<Serde $StructName>] {
 			$(
@@ -513,7 +513,7 @@ impl core::fmt::Debug for PspDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 8]
 #[non_exhaustive]
 pub enum PspDirectoryEntryType {
@@ -604,7 +604,7 @@ impl DummyErrorChecks for PspDirectoryEntryType {
 }
 
 /// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 1]
 pub enum PspSoftFuseChain32MiBSpiDecoding {
 	LowerHalf = 0,
@@ -614,7 +614,7 @@ pub enum PspSoftFuseChain32MiBSpiDecoding {
 impl DummyErrorChecks for PspSoftFuseChain32MiBSpiDecoding {
 }
 
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 1]
 pub enum PspSoftFuseChainPostCodeDecoding {
 	Lpc = 0,
@@ -660,7 +660,7 @@ impl Default for PspSoftFuseChain {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 2]
 #[non_exhaustive]
 pub enum PspDirectoryRomId {
@@ -678,7 +678,7 @@ impl Default for PspDirectoryRomId {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 2]
 #[non_exhaustive]
 pub enum BhdDirectoryRomId {
@@ -714,7 +714,7 @@ fn zero() -> u8 {
 }
 
 #[doc(hidden)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct CustomSerdePspDirectoryEntryAttrs {
 	pub type_: PspDirectoryEntryType,
 	#[serde(default = "zero")]
@@ -916,7 +916,7 @@ impl core::fmt::Debug for BhdDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 8]
 #[non_exhaustive]
 pub enum BhdDirectoryEntryType {
@@ -941,7 +941,7 @@ pub enum BhdDirectoryEntryType {
 impl DummyErrorChecks for BhdDirectoryEntryType {
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
 #[bits = 8]
 #[non_exhaustive]
 pub enum BhdDirectoryEntryRegionType {
@@ -1005,7 +1005,7 @@ fn sub_program_default() -> u8 {
 }
 
 #[doc(hidden)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct CustomSerdeBhdDirectoryEntryAttrs {
 	pub type_: BhdDirectoryEntryType,
 	#[serde(default)]
