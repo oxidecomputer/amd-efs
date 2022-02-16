@@ -1,19 +1,30 @@
+* Maybe support multiple boards and CPUs in the same image
+  * Fixed 16 MiB window for the PSP
+  * 64 MiB max flash size
+    * top half vs bottom half for primary vs backup, sel via pinstrap
+      * each half is 32 MiB in size, and can support 2 different processor models
+This primary/backup mechanism is distinct from the '2-level' recovery mechanism described in [amd-psp-boot] 4.5, and the multi-model support is distinct from the 'combo BIOS' mechanism described in [amd-psp-boot] 4.1.4.2.
+These mechanisms are orthogonal because the EFS generation versions are absolute and the other mechanisms operate within a single 16 MB block, which must have its own singular EFS.
 
 # Important
 
 * Connect via hubris ./drv/stm32h7-spi-server/src/main.rs
-* Is crossing page boundary when writing to the flash handled?
-* bhddirectoryentry should not have a new_value !!!
+* Is crossing erase page boundary when writing to the flash handled? FIXME
 * serde also create secondary directories ~
 * psp directory entry high 2 bits of location are address mode    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-* bios directory entry high 2 bits of location are address mode   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+* bhd directory entry high 2 bits of location are address mode   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  * Maybe change ValueOrLocation type?
+    * Depends on directory header's address_mode; if that is 2, then entry address mode exists; otherwise it's 0.
+      * AddressMode 0: X86 MMIO physical address; bits 63...56 are 0; so addr is 56 bits
+      * AddressMode 1: relative address to entire BIOS image; might be 16M binary relative offset; bit 63~56: 0x40
+      * AddressMode 2: relative address to PSP/BIOS directory; bit 63~56: 0x80
+      * AddressMode 3 (!) relative address to slot N (only valid on the entry); bit 63~56: 0xC0
+    * See #55758 page 120 for example
+* bhddirectoryentry should NOT have a new_value !!! According to the documentation, no.
+  It's actually just a location, and the weird two high bits (see above).
 * Support directory headers somewhere else than the content
   * directory_beginning, contents_beginning: Figure out what exactly happens when base_address /= 0.  Does it mean the entries move there, too?
 * Directory tables: update checksum (fletcher) less often (currently that's done on EVERY entry; better do it on drop maybe)
-
-# Tests
-
-* Tests: secondary psp directory, secondary bios directory.
 
 # Convenience and Resilience
 
@@ -39,5 +50,5 @@
 
 # Later if we need it
 
-* Use https://docs.rs/schemars/latest/schemars/ to autogenerate JSON Schema
 * Create secondary bios directory
+  * Tests: secondary psp directory, secondary bios directory.
