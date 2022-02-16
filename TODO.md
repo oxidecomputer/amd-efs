@@ -1,3 +1,6 @@
+* Allow editing micron modes etc in the JSON (PARTS of the EFS); each of the flash modes is available per model
+  Add Bulldozer?
+* Default EfhRomeSpiMode.MicronDetectFlag to 0x55
 * Maybe support multiple boards and CPUs in the same image
   * Fixed 16 MiB window for the PSP
   * 64 MiB max flash size
