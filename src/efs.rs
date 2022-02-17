@@ -8,7 +8,7 @@ use crate::ondisk::{
 	BhdDirectoryEntryAttrs, BhdDirectoryEntryType, BhdDirectoryHeader,
 	DirectoryAdditionalInfo, DirectoryEntry, DirectoryHeader, Efh,
 	PspDirectoryEntry, PspDirectoryEntryAttrs, PspDirectoryEntryType,
-	PspDirectoryHeader,
+	PspDirectoryHeader, EfhRomeSpiMode, EfhNaplesSpiMode, EfhBulldozerSpiMode,
 };
 use crate::types::Error;
 use crate::types::LocationMode;
@@ -1212,6 +1212,31 @@ impl<
 		self.storage
 			.erase_and_write_block(self.efh_beginning, &buf)?;
 		Ok(())
+	}
+
+	pub fn spi_mode_bulldozer(&self) -> Result<EfhBulldozerSpiMode> {
+		self.efh.spi_mode_bulldozer()
+	}
+	pub fn set_spi_mode_bulldozer(&mut self, value: EfhBulldozerSpiMode) {
+		self.efh.set_spi_mode_bulldozer(value)
+		// FIXME: write_efh ?
+	}
+	pub fn spi_mode_zen_naples(&self) -> Result<EfhNaplesSpiMode> {
+		self.efh.spi_mode_zen_naples()
+	}
+
+	pub fn set_spi_mode_zen_naples(&mut self, value: EfhNaplesSpiMode) {
+		self.efh.set_spi_mode_zen_naples(value)
+		// FIXME: write_efh ?
+	}
+
+	pub fn spi_mode_zen_rome(&self) -> Result<EfhRomeSpiMode> {
+		self.efh.spi_mode_zen_rome()
+	}
+
+	pub fn set_spi_mode_zen_rome(&mut self, value: EfhRomeSpiMode) {
+		self.efh.set_spi_mode_zen_rome(value)
+		// FIXME: write_efh ?
 	}
 
 	/// Note: BEGINNING, END are coordinates (in Byte).
