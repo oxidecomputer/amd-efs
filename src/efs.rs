@@ -9,6 +9,7 @@ use crate::ondisk::{
 	DirectoryAdditionalInfo, DirectoryEntry, DirectoryHeader, Efh,
 	PspDirectoryEntry, PspDirectoryEntryAttrs, PspDirectoryEntryType,
 	PspDirectoryHeader, EfhRomeSpiMode, EfhNaplesSpiMode, EfhBulldozerSpiMode,
+	ComboDirectoryHeader, ComboDirectoryEntry,
 };
 use crate::types::Error;
 use crate::types::LocationMode;
@@ -588,6 +589,15 @@ pub type BhdDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	0x1000,
 	ERASABLE_BLOCK_SIZE,
 >;
+pub type ComboDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
+	'a,
+	ComboDirectoryHeader,
+	ComboDirectoryEntry,
+	T,
+	(),
+	0x1000,
+	ERASABLE_BLOCK_SIZE,
+>;
 
 impl<
 		'a,
@@ -987,6 +997,7 @@ impl<
 		Self::load(storage, Some(processor_generation))
 	}
 
+	/// Note: Either psp_directory or psp_combo_directory will succeed--but not both.
 	pub fn psp_directory(
 		&self,
 	) -> Result<PspDirectory<T, ERASABLE_BLOCK_SIZE>> {
@@ -1039,6 +1050,65 @@ impl<
 				)?;
 				if directory.header.cookie == *b"$PSP" {
 					// level 1 PSP header should have "$PSP" cookie
+					Ok(directory)
+				} else {
+					Err(Error::Marshal)
+				}
+			}
+		}
+	}
+
+	/// Note: Either psp_directory or psp_combo_directory will succeed--but not both.
+	pub fn psp_combo_directory(
+		&self,
+	) -> Result<ComboDirectory<T, ERASABLE_BLOCK_SIZE>> {
+		let psp_directory_table_location =
+			self.efh.psp_directory_table_location_zen().ok().or(Some(0xffff_ffff)).unwrap();
+		if psp_directory_table_location == 0xffff_ffff {
+			Err(Error::PspDirectoryHeaderNotFound)
+		} else {
+			let directory = match ComboDirectory::load(
+				self.efh.location_mode(),
+				&self.storage,
+				psp_directory_table_location,
+			) {
+				Ok(directory) => {
+					if directory.header.cookie == *b"2PSP" {
+						return Ok(directory);
+					}
+				}
+				Err(Error::Marshal) => {}
+				Err(e) => {
+					return Err(e);
+				}
+			};
+
+			// That's the same fallback AMD does on Naples:
+
+			let psp_directory_table_location = {
+				let addr = self
+					.efh
+					.psp_directory_table_location_naples()
+					.ok()
+					.or(Some(0xffff_ffff))
+					.unwrap();
+				if addr == 0xffff_ffff {
+					addr
+				} else {
+					addr & 0x00ff_ffff
+				}
+			};
+			if psp_directory_table_location == 0xffff_ffff ||
+				psp_directory_table_location == 0
+			{
+				Err(Error::PspDirectoryHeaderNotFound)
+			} else {
+				let directory = ComboDirectory::load(
+					self.efh.location_mode(),
+					&self.storage,
+					psp_directory_table_location,
+				)?;
+				if directory.header.cookie == *b"2PSP" {
 					Ok(directory)
 				} else {
 					Err(Error::Marshal)

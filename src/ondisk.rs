@@ -1284,6 +1284,33 @@ impl Default for ComboDirectoryHeader {
 	}
 }
 
+impl DirectoryHeader for ComboDirectoryHeader {
+	fn cookie(&self) -> [u8; 4] {
+		self.cookie
+	}
+	fn set_cookie(&mut self, value: [u8; 4]) {
+		self.cookie = value;
+	}
+	fn additional_info(&self) -> DirectoryAdditionalInfo {
+		DirectoryAdditionalInfo::from(0)
+	}
+	fn set_additional_info(&mut self, value: DirectoryAdditionalInfo) {
+	}
+	fn total_entries(&self) -> u32 {
+		self.total_entries.get()
+	}
+	fn set_total_entries(&mut self, value: u32) {
+		self.total_entries.set(value)
+	}
+	fn checksum(&self) -> u32 {
+		self.checksum.get()
+	}
+        fn set_checksum(&mut self, value: u32) {
+                self.checksum.set(value)
+        }
+}
+
+
 impl ComboDirectoryHeader {
 	pub fn new(cookie: [u8; 4]) -> Result<Self> {
 		if cookie == *b"2PSP" || cookie == *b"2BHD" {
@@ -1301,7 +1328,37 @@ impl ComboDirectoryHeader {
 pub struct ComboDirectoryEntry {
 	key: LU32, // 0-PSP ID; 1-chip family ID
 	value: LU32,
-	directory_entry_location: LU64, // Note: If 32 bit high nibble is set, then that's a physical address
+	source: LU64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
+}
+
+impl core::fmt::Debug for ComboDirectoryEntry {
+	fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		let source = self.source();
+		fmt.debug_struct("ComboDirectoryEntry")
+			.field("source", &source)
+			.finish()
+	}
+}
+
+impl DirectoryEntry for ComboDirectoryEntry {
+	fn source(&self) -> ValueOrLocation {
+		let source = self.source.get();
+		ValueOrLocation::Location(source)
+	}
+	fn set_source(&mut self, value: ValueOrLocation) -> Result<()> {
+		match value {
+			ValueOrLocation::Location(v) => {
+				self.source.set(v);
+				Ok(())
+			}
+			_ => {
+				Err(Error::DirectoryTypeMismatch)
+			}
+		}
+	}
+	fn size(&self) -> Option<u32> {
+		None
+        }
 }
 
 #[cfg(test)]
