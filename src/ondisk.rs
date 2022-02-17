@@ -1262,14 +1262,25 @@ impl core::fmt::Debug for BhdDirectoryEntry {
 	}
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
-#[repr(C, packed)]
-pub struct ComboDirectoryHeader {
-	pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"
-	pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
-	pub(crate) total_entries: LU32,
-	pub(crate) lookup_mode: LU32,
-	_reserved: [u8; 16], // 0
+#[repr(u32)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
+#[non_exhaustive]
+pub enum ComboDirectoryLookupMode {
+	BruteForce = 0,
+	MatchId = 1,
+}
+
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+	#[repr(C, packed)]
+	pub struct ComboDirectoryHeader {
+		pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"
+		pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
+		pub(crate) total_entries: LU32,
+		pub(crate) lookup_mode: LU32 : pub get Result<ComboDirectoryLookupMode> : pub set ComboDirectoryLookupMode,
+		_reserved: [u8; 16], // 0
+	}
 }
 
 impl Default for ComboDirectoryHeader {
@@ -1323,12 +1334,23 @@ impl ComboDirectoryHeader {
 	}
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
-#[repr(C, packed)]
-pub struct ComboDirectoryEntry {
-	key: LU32, // 0-PSP ID; 1-chip family ID
-	value: LU32,
-	source: LU64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
+//#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Deserialize, serde::Serialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
+#[non_exhaustive]
+pub enum ComboDirectoryEntryFilter {
+	PspId(u32), // = 0,
+	ChipFamilyId(u32), // = 1,
+}
+
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+	#[repr(C, packed)]
+	pub struct ComboDirectoryEntry {
+		key: LU32, // 0-PSP ID; 1-chip family ID
+		value: LU32,
+		source: LU64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
+	}
 }
 
 impl core::fmt::Debug for ComboDirectoryEntry {
@@ -1359,6 +1381,36 @@ impl DirectoryEntry for ComboDirectoryEntry {
 	fn size(&self) -> Option<u32> {
 		None
         }
+}
+
+impl ComboDirectoryEntry {
+	pub fn filter(&self) -> Result<ComboDirectoryEntryFilter> {
+		let key = self.key.get();
+		let value = self.value.get();
+		match key {
+			0 => {
+				Ok(ComboDirectoryEntryFilter::PspId(value))
+			}
+			1 => {
+				Ok(ComboDirectoryEntryFilter::ChipFamilyId(value))
+			}
+			_ => {
+				Err(Error::DirectoryTypeMismatch)
+			}
+		}
+	}
+	pub fn set_filter(&mut self, value: ComboDirectoryEntryFilter) {
+		match value {
+			ComboDirectoryEntryFilter::PspId(value) => {
+				self.key.set(0);
+				self.value.set(value)
+			}
+			ComboDirectoryEntryFilter::ChipFamilyId(value) => {
+				self.key.set(0);
+				self.value.set(value)
+			}
+		}
+	}
 }
 
 #[cfg(test)]
