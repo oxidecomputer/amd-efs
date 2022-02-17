@@ -46,6 +46,7 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 	}
 )}
 
+make_serde!(EfhBulldozerSpiMode, SerdeEfhBulldozerSpiMode, [read_mode, fast_speed_new]);
 make_serde!(EfhNaplesSpiMode, SerdeEfhNaplesSpiMode, [read_mode, fast_speed_new, micron_mode]);
 make_serde!(EfhRomeSpiMode, SerdeEfhRomeSpiMode, [read_mode, fast_speed_new, micron_mode]);
 make_serde!(
@@ -61,6 +62,7 @@ make_serde!(
 		promontory_firmware_location,
 		psp_directory_table_location_naples,
 		psp_directory_table_location_zen,
+		spi_mode_bulldozer,
 		spi_mode_zen_naples,
 		spi_mode_zen_rome
 	]

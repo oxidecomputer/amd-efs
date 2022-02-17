@@ -78,6 +78,39 @@ pub enum SpiFastSpeedNew {
 	DoNothing = 0xff,
 }
 
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
+	#[repr(C, packed)]
+	pub struct EfhBulldozerSpiMode {
+		read_mode: u8 : pub get Result<SpiReadMode> : pub set SpiReadMode,
+		fast_speed_new: u8 : pub get Result<SpiFastSpeedNew> : pub set SpiFastSpeedNew,
+		_reserved: u8,
+	}
+}
+
+impl Default for EfhBulldozerSpiMode {
+	fn default() -> Self {
+		Self {
+			read_mode: 0xff,
+			fast_speed_new: 0xff,
+			_reserved: 0xff, // FIXME: check
+		}
+	}
+}
+
+impl Getter<Result<EfhBulldozerSpiMode>> for EfhBulldozerSpiMode {
+	fn get1(self) -> Result<Self> {
+		Ok(self)
+	}
+}
+
+impl Setter<EfhBulldozerSpiMode> for EfhBulldozerSpiMode {
+	fn set1(&mut self, value: Self) {
+		*self = value
+	}
+}
+
 #[repr(u8)]
 #[derive(Debug, PartialEq, FromPrimitive, ToPrimitive, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
@@ -181,7 +214,7 @@ make_accessors! {
 		promontory_firmware_location: LU32 : pub get Result<u32> : pub set u32,
 		pub low_power_promontory_firmware_location: LU32 : pub get Result<u32> : pub set u32,
 		_padding2: [LU32; 2],                      // at offset 0x38
-		_reserved: [u8; 3], // SPI for family 15h; Note: micron_mode is reserved instead
+		spi_mode_bulldozer: EfhBulldozerSpiMode : pub get Result<EfhBulldozerSpiMode> : pub set EfhBulldozerSpiMode,
 		spi_mode_zen_naples: EfhNaplesSpiMode : pub get Result<EfhNaplesSpiMode> : pub set EfhNaplesSpiMode, // and Raven Ridge
 		spi_mode_zen_rome: EfhRomeSpiMode : pub get Result<EfhRomeSpiMode> : pub set EfhRomeSpiMode,
 		_reserved2: u8,
@@ -205,7 +238,7 @@ impl Default for Efh {
 			low_power_promontory_firmware_location: 0xffff_ffff
 				.into(),
 			_padding2: [0xffff_ffff.into(); 2],
-			_reserved: [0xff; 3],
+			spi_mode_bulldozer: EfhBulldozerSpiMode::default(),
 			spi_mode_zen_naples: EfhNaplesSpiMode::default(),
 			spi_mode_zen_rome: EfhRomeSpiMode::default(),
 			_reserved2: 0,
