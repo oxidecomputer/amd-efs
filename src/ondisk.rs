@@ -1269,6 +1269,7 @@ mod tests {
 
 	#[test]
 	fn test_struct_sizes() {
+		assert!(size_of::<EfhBulldozerSpiMode>() == 3);
 		assert!(size_of::<EfhNaplesSpiMode>() == 3);
 		assert!(size_of::<EfhRomeSpiMode>() == 3);
 		assert!(size_of::<Efh>() < 0x100);
