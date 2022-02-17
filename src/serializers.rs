@@ -5,7 +5,6 @@
 
 use crate::ondisk::*;
 use crate::struct_accessors::DummyErrorChecks;
-use schemars::JsonSchema;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
 macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
