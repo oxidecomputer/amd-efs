@@ -1296,6 +1296,14 @@ impl ComboDirectoryHeader {
 	}
 }
 
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[repr(C, packed)]
+pub struct ComboDirectoryEntry {
+	key: LU32, // 0-PSP ID; 1-chip family ID
+	value: LU32,
+	directory_entry_location: LU64, // Note: If 32 bit high nibble is set, then that's a physical address
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -1312,6 +1320,7 @@ mod tests {
 		assert!(size_of::<BhdDirectoryHeader>() == 16);
 		assert!(size_of::<BhdDirectoryEntry>() == 24);
 		assert!(size_of::<ComboDirectoryHeader>() == 32);
+		assert!(size_of::<ComboDirectoryEntry>() == 16);
 	}
 
 	#[test]
