@@ -11,6 +11,7 @@ pub enum Error {
 	Duplicate,
 	Misaligned,
 	EntryTypeMismatch,
+	DirectoryTypeMismatch,
 }
 
 pub type Result<Q> = core::result::Result<Q, Error>;

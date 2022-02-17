@@ -1262,6 +1262,40 @@ impl core::fmt::Debug for BhdDirectoryEntry {
 	}
 }
 
+#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[repr(C, packed)]
+pub struct ComboDirectoryHeader {
+	pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"
+	pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
+	pub(crate) total_entries: LU32,
+	pub(crate) lookup_mode: LU32,
+	_reserved: [u8; 16], // 0
+}
+
+impl Default for ComboDirectoryHeader {
+	fn default() -> Self {
+		Self {
+			cookie: *b"FIXM",
+			checksum: 0.into(),
+			lookup_mode: 0.into(),
+			total_entries: 0.into(),
+			_reserved: [0; 16],
+		}
+	}
+}
+
+impl ComboDirectoryHeader {
+	pub fn new(cookie: [u8; 4]) -> Result<Self> {
+		if cookie == *b"2PSP" || cookie == *b"2BHD" {
+			let mut result = Self::default();
+			result.cookie = cookie;
+			Ok(result)
+		} else {
+			Err(Error::DirectoryTypeMismatch)
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -1277,6 +1311,7 @@ mod tests {
 		assert!(size_of::<PspDirectoryEntry>() == 16);
 		assert!(size_of::<BhdDirectoryHeader>() == 16);
 		assert!(size_of::<BhdDirectoryEntry>() == 24);
+		assert!(size_of::<ComboDirectoryHeader>() == 32);
 	}
 
 	#[test]
