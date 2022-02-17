@@ -31,7 +31,7 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 				}.serialize(serializer)
 			}
 		}
-		//#[cfg(std)]
+		#[cfg(std)]
 		impl schemars::JsonSchema for $StructName {
 			fn schema_name() -> String {
 				$SerdeStructName::schema_name()
