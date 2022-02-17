@@ -158,7 +158,7 @@ impl Default for EfhRomeSpiMode {
 		Self {
 			read_mode: 0xff,
 			fast_speed_new: 0xff,
-			micron_mode: 0xff,
+			micron_mode: 0x55,
 		}
 	}
 }
