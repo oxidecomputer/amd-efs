@@ -10,7 +10,6 @@ use core::convert::TryInto;
 use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
-use num_traits::ToPrimitive;
 use crate::struct_accessors::make_accessors;
 use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
