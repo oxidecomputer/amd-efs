@@ -83,8 +83,8 @@ make_accessors! {
 	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	#[repr(C, packed)]
 	pub struct EfhBulldozerSpiMode {
-		read_mode: u8 : pub get Result<SpiReadMode> : pub set SpiReadMode,
-		fast_speed_new: u8 : pub get Result<SpiFastSpeedNew> : pub set SpiFastSpeedNew,
+		read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
+		fast_speed_new: u8 : pub get SpiFastSpeedNew : pub set SpiFastSpeedNew,
 		_reserved: u8,
 	}
 }
@@ -125,9 +125,9 @@ make_accessors! {
 	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	#[repr(C, packed)]
 	pub struct EfhNaplesSpiMode {
-		read_mode: u8 : pub get Result<SpiReadMode> : pub set SpiReadMode,
-		fast_speed_new: u8 : pub get Result<SpiFastSpeedNew> : pub set SpiFastSpeedNew,
-		micron_mode: u8 : pub get Result<SpiNaplesMicronMode> : pub set SpiNaplesMicronMode,
+		read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
+		fast_speed_new: u8 : pub get SpiFastSpeedNew : pub set SpiFastSpeedNew,
+		micron_mode: u8 : pub get SpiNaplesMicronMode : pub set SpiNaplesMicronMode,
 	}
 }
 
@@ -180,9 +180,9 @@ make_accessors! {
 	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	#[repr(C, packed)]
 	pub struct EfhRomeSpiMode {
-		read_mode: u8 : pub get Result<SpiReadMode> : pub set SpiReadMode,
-		fast_speed_new: u8 : pub get Result<SpiFastSpeedNew> : pub set SpiFastSpeedNew,
-		micron_mode: u8 : pub get Result<SpiRomeMicronMode> : pub set SpiRomeMicronMode,
+		read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
+		fast_speed_new: u8 : pub get SpiFastSpeedNew : pub set SpiFastSpeedNew,
+		micron_mode: u8 : pub get SpiRomeMicronMode : pub set SpiRomeMicronMode,
 	}
 }
 
@@ -200,23 +200,23 @@ make_accessors! {
 	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 	#[repr(C, packed)]
 	pub struct Efh {
-		signature: LU32 : pub get Result<u32> : pub set u32,                           // 0x55aa_55aa
-		imc_fw_location: LU32 : pub get Result<u32> : pub set u32,                     // usually unused
-		gbe_fw_location: LU32 : pub get Result<u32> : pub set u32,                     // usually unused
-		xhci_fw_location: LU32 : pub get Result<u32> : pub set u32,                    // usually unused
-		psp_directory_table_location_naples: LU32 : pub get Result<u32> : pub set u32, // usually unused
-		psp_directory_table_location_zen: LU32 : pub get Result<u32> : pub set u32,
+		signature: LU32 : pub get u32 : pub set u32,                           // 0x55aa_55aa
+		imc_fw_location: LU32 : pub get u32 : pub set u32,                     // usually unused
+		gbe_fw_location: LU32 : pub get u32 : pub set u32,                     // usually unused
+		xhci_fw_location: LU32 : pub get u32 : pub set u32,                    // usually unused
+		psp_directory_table_location_naples: LU32 : pub get u32 : pub set u32, // usually unused
+		psp_directory_table_location_zen: LU32 : pub get u32 : pub set u32,
 		/// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BHD_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BHD_DIRECTORY_TABLE_MILAN instead.
 		pub bhd_directory_tables: [LU32; 3],
 		pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
-		bhd_directory_table_milan: LU32 : pub get Result<u32> : pub set u32, // or Combo
+		bhd_directory_table_milan: LU32 : pub get u32 : pub set u32, // or Combo
 		_padding: LU32,
-		promontory_firmware_location: LU32 : pub get Result<u32> : pub set u32,
-		pub low_power_promontory_firmware_location: LU32 : pub get Result<u32> : pub set u32,
+		promontory_firmware_location: LU32 : pub get u32 : pub set u32,
+		pub low_power_promontory_firmware_location: LU32 : pub get u32 : pub set u32,
 		_padding2: [LU32; 2],                      // at offset 0x38
-		spi_mode_bulldozer: EfhBulldozerSpiMode : pub get Result<EfhBulldozerSpiMode> : pub set EfhBulldozerSpiMode,
-		spi_mode_zen_naples: EfhNaplesSpiMode : pub get Result<EfhNaplesSpiMode> : pub set EfhNaplesSpiMode, // and Raven Ridge
-		spi_mode_zen_rome: EfhRomeSpiMode : pub get Result<EfhRomeSpiMode> : pub set EfhRomeSpiMode,
+		spi_mode_bulldozer: EfhBulldozerSpiMode : pub get EfhBulldozerSpiMode : pub set EfhBulldozerSpiMode,
+		spi_mode_zen_naples: EfhNaplesSpiMode : pub get EfhNaplesSpiMode : pub set EfhNaplesSpiMode, // and Raven Ridge
+		spi_mode_zen_rome: EfhRomeSpiMode : pub get EfhRomeSpiMode : pub set EfhRomeSpiMode,
 		_reserved2: u8,
 	}
 }
@@ -1278,7 +1278,7 @@ make_accessors! {
 		pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"
 		pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
 		pub(crate) total_entries: LU32,
-		pub(crate) lookup_mode: LU32 : pub get Result<ComboDirectoryLookupMode> : pub set ComboDirectoryLookupMode,
+		pub(crate) lookup_mode: LU32 : pub get ComboDirectoryLookupMode : pub set ComboDirectoryLookupMode,
 		_reserved: [u8; 16], // 0
 	}
 }
