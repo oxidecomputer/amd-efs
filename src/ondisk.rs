@@ -341,7 +341,7 @@ impl Efh {
 pub enum AddressMode {
 	/// Only supported for images <= 16 MiB.
 	/// Right-justified in 4 GiB address space.
-	/// Only really used in models older than Rome.
+	/// Only really used in families older than Rome.
 	PhysicalAddress = 0,
 	EfsRelativeOffset = 1,       // x
 	DirectoryRelativeOffset = 2, // (x - Base)
