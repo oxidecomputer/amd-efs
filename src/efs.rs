@@ -990,7 +990,7 @@ impl<
 
 		storage.erase_and_write_block(
 			ErasableLocation::<ERASABLE_BLOCK_SIZE>::try_from(
-				0x20_000u32,
+				0xFA_0000u32,
 			)?,
 			&buf,
 		)?;
