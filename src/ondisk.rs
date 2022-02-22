@@ -355,22 +355,17 @@ pub(crate) fn mmio_encode(value: Location, amd_physical_mode_mmio_size: Option<u
 	Ok(value.checked_add(mmio_address_lower).ok_or(Error::DirectoryTypeMismatch)?)
 }
 
-// FIXME: remove 0-check?
 pub(crate) fn mmio_decode(value: u32, amd_physical_mode_mmio_size: u32) -> Result<u32> {
-	if value == 0 {
-		Ok(0)
-        } else {
-		let mmio_address_lower = match amd_physical_mode_mmio_size {
-			0 => {
-				return Err(Error::DirectoryTypeMismatch)
-			}
-			x => 1 + (0xFFFF_FFFFu32 - x)
-		};
-		if value >= mmio_address_lower {
-			Ok(value - mmio_address_lower)
-		} else {
-			Err(Error::DirectoryTypeMismatch)
+	let mmio_address_lower = match amd_physical_mode_mmio_size {
+		0 => {
+			return Err(Error::DirectoryTypeMismatch)
 		}
+		x => 1 + (0xFFFF_FFFFu32 - x)
+	};
+	if value >= mmio_address_lower {
+		Ok(value - mmio_address_lower)
+	} else {
+		Err(Error::DirectoryTypeMismatch)
 	}
 }
 
