@@ -930,7 +930,7 @@ pub struct Efs<
 > {
 	storage: T,
 	efh_beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-	efh: Efh,
+	pub efh: Efh,
 	amd_physical_mode_mmio_size: Option<u32>,
 }
 
@@ -1223,7 +1223,17 @@ impl<
 				if let Some(amd_physical_mode_mmio_size) = amd_physical_mode_mmio_size {
 					match mmio_decode(v, amd_physical_mode_mmio_size) {
 						Ok(v) => v,
-						Err(_) => 0xffff_ffff
+						Err(Error::DirectoryTypeMismatch) => {
+							// Rome is a grey-area that supports both MMIO addresses and offsets
+							if v < amd_physical_mode_mmio_size {
+								v
+							} else {
+								0xffff_ffff
+							}
+						}
+						Err(_) => {
+							0xffff_ffff
+						}
 					}
 				} else {
 					0xffff_ffff
