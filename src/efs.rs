@@ -369,7 +369,7 @@ impl<
 		}
 	}
 
-	pub(crate) fn location_of_source(&self, source: ValueOrLocation, entry_base_location: Location) -> Result<Location> {
+	pub fn location_of_source(&self, source: ValueOrLocation, entry_base_location: Location) -> Result<Location> {
 		match source {
 			ValueOrLocation::Value(_) => {
 				Err(Error::DirectoryTypeMismatch)
