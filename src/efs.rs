@@ -930,7 +930,7 @@ pub struct Efs<
 > {
 	storage: T,
 	efh_beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-	pub efh: Efh,
+	efh: Efh,
 	amd_physical_mode_mmio_size: Option<u32>,
 }
 
