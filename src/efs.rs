@@ -1216,19 +1216,27 @@ impl<
 	pub fn bhd_directories(
 		&self,
 	) -> Result<EfhBhdsIterator<T, ERASABLE_BLOCK_SIZE>> {
-		fn de_mmio(v: u32) -> u32 { // FIXME: Use mmio_decode
-			if v == 0xffff_ffff {
-			    v
+		fn de_mmio(v: u32, amd_physical_mode_mmio_size: Option<u32>) -> u32 {
+			if v == 0xffff_ffff || v == 0 {
+				0xffff_ffff
 			} else {
-			    v & 0x00ff_ffff
+				if let Some(amd_physical_mode_mmio_size) = amd_physical_mode_mmio_size {
+					match mmio_decode(v, amd_physical_mode_mmio_size) {
+						Ok(v) => v,
+						Err(_) => 0xffff_ffff
+					}
+				} else {
+					0xffff_ffff
+				}
 			}
 		}
 		let efh = &self.efh;
+		let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
 		let positions = [
 			efh.bhd_directory_table_milan().ok().or(Some(0xffff_ffff)).unwrap(),
-			de_mmio(efh.bhd_directory_tables[2].get()),
-			de_mmio(efh.bhd_directory_tables[1].get()),
-			de_mmio(efh.bhd_directory_tables[0].get()),
+			de_mmio(efh.bhd_directory_tables[2].get(), amd_physical_mode_mmio_size),
+			de_mmio(efh.bhd_directory_tables[1].get(), amd_physical_mode_mmio_size),
+			de_mmio(efh.bhd_directory_tables[0].get(), amd_physical_mode_mmio_size),
 		]; // the latter are physical addresses
 		Ok(EfhBhdsIterator {
 			storage: &self.storage,
