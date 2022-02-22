@@ -1,10 +1,10 @@
-* Maybe support multiple boards and CPUs in the same image
-  * Fixed 16 MiB window for the PSP
-  * 64 MiB max flash size
-    * top half vs bottom half for primary vs backup, sel via pinstrap
-      * each half is 32 MiB in size, and can support 2 different processor models
-This primary/backup mechanism is distinct from the '2-level' recovery mechanism described in [amd-psp-boot] 4.5, and the multi-model support is distinct from the 'combo BIOS' mechanism described in [amd-psp-boot] 4.1.4.2.
-These mechanisms are orthogonal because the EFS generation versions are absolute and the other mechanisms operate within a single 16 MB block, which must have its own singular EFS.
+# Short-term
+
+* Replace de_mmio by mmio_decode ?
+* Efs:create: Handle directory_address_mode.
+* Callers of location_of_source: Fix arguments.
+* Check for Directory.AddressMode > 2 (= 3), and error out if it is
+* Do upper16.
 
 # Important
 
@@ -52,3 +52,9 @@ These mechanisms are orthogonal because the EFS generation versions are absolute
 
 * Create secondary bios directory
   * Tests: secondary psp directory, secondary bios directory.
+
+# Later after release
+
+* Compression
+* Make find_payload_empty_slot skip over zlib-compressed entries correctly
+  (Entry.size is the UNCOMPRESSED size; new header is 256 byte (all 0, except offset 0x14 size 4: compressed image size excluding the header))
