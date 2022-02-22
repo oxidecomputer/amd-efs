@@ -13,7 +13,6 @@
 * Connect via hubris ./drv/stm32h7-spi-server/src/main.rs
 * Is crossing erase page boundary when writing to the flash handled? FIXME
 * serde also create secondary directories ~
-* bhddirectoryentry should NOT have a new_value !!! According to the documentation, no.
   It's actually just a location, and the weird two high bits (see above).
 * Support directory headers somewhere else than the content
   * directory_beginning, contents_beginning: Figure out what exactly happens when base_address /= 0.  Does it mean the entries move there, too?
