@@ -325,13 +325,24 @@ pub(crate) const WEAK_ADDRESS_MODE: AddressMode = AddressMode::DirectoryRelative
 impl DummyErrorChecks for AddressMode {
 }
 
-#[derive(Debug)]
 pub enum ValueOrLocation {
 	Value(u64),
 	PhysicalAddress(u32),
         EfsRelativeOffset(u32),
         DirectoryRelativeOffset(u32),
         EntryRelativeOffset(u32),
+}
+
+impl core::fmt::Debug for ValueOrLocation {
+	fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match *self {
+			Self::Value(x) => write!(fmt, "Value({:x?})", x),
+			Self::PhysicalAddress(x) => write!(fmt, "PhysicalAddress({:#x?})", x),
+			Self::EfsRelativeOffset(x) => write!(fmt, "EfsRelativeOffset({:#x?})", x),
+			Self::DirectoryRelativeOffset(x) => write!(fmt, "DirectoryRelativeOffset({:#x?})", x),
+			Self::EntryRelativeOffset(x) => write!(fmt, "EntryRelativeOffset({:#x?})", x),
+		}
+	}
 }
 
 pub(crate) fn mmio_encode(value: Location, amd_physical_mode_mmio_size: Option<u32>) -> Result<u32> {
