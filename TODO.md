@@ -1,7 +1,5 @@
 # Short-term
 
-* Maybe add AddressMode to create_bhd_directory
-* Maybe add AddressMode to create_psp_directory
 * Efs:create: Handle directory_address_mode.
 * Callers of location_of_source: Fix arguments.
 * Check for Directory.AddressMode > 2 (= 3), and error out if it is

@@ -1391,7 +1391,23 @@ impl<
 		&mut self,
 		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
 		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
+		default_entry_address_mode: AddressMode,
 	) -> Result<BhdDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
+		match default_entry_address_mode {
+			AddressMode::PhysicalAddress => {
+				if !self.physical_address_mode() {
+					return Err(Error::DirectoryTypeMismatch)
+				}
+			}
+			AddressMode::EfsRelativeOffset => {
+				if self.physical_address_mode() {
+					return Err(Error::DirectoryTypeMismatch)
+				}
+			}
+			_ => {
+				return Err(Error::DirectoryTypeMismatch)
+			}
+		}
 		match self.bhd_directories() {
 			Ok(items) => {
 				for directory in items {
@@ -1417,10 +1433,7 @@ impl<
 		}
 		self.write_efh()?;
 		let result = BhdDirectory::create(
-			match self.physical_address_mode() {
-				true => AddressMode::PhysicalAddress,
-				false => AddressMode::EfsRelativeOffset,
-			},
+			default_entry_address_mode,
 			&mut self.storage,
 			beginning,
 			end,
@@ -1435,7 +1448,23 @@ impl<
 		&mut self,
 		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
 		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
+		default_entry_address_mode: AddressMode,
 	) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
+		match default_entry_address_mode {
+			AddressMode::PhysicalAddress => {
+				if !self.physical_address_mode() {
+					return Err(Error::DirectoryTypeMismatch)
+				}
+			}
+			AddressMode::EfsRelativeOffset => {
+				if self.physical_address_mode() {
+					return Err(Error::DirectoryTypeMismatch)
+				}
+			}
+			_ => {
+				return Err(Error::DirectoryTypeMismatch)
+			}
+		}
 		match self.psp_directory() {
 			Err(Error::PspDirectoryHeaderNotFound) => {}
 			Err(e) => {
@@ -1453,10 +1482,7 @@ impl<
 		self.efh.set_psp_directory_table_location_zen(beginning.into());
 		self.write_efh()?;
 		let result = PspDirectory::create(
-			match self.physical_address_mode() {
-				true => AddressMode::PhysicalAddress,
-				false => AddressMode::EfsRelativeOffset,
-			},
+			default_entry_address_mode,
 			&mut self.storage,
 			beginning,
 			end,
