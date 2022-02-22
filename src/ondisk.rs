@@ -1242,15 +1242,6 @@ impl BhdDirectoryEntry {
 			Some(destination_location)
 		}
 	}
-	pub fn new_value(attrs: &BhdDirectoryEntryAttrs, value: u64) -> Self {
-		Self {
-			attrs: u32::from(*attrs).into(),
-			size: Self::SIZE_VALUE_MARKER.into(),
-			source: value.into(),
-			destination_location: Self::DESTINATION_NONE_MARKER
-				.into(),
-		}
-	}
 	pub fn new_payload(
 		attrs: &BhdDirectoryEntryAttrs,
 		size: u32,
