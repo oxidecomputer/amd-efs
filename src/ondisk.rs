@@ -834,6 +834,7 @@ fn zero() -> u8 {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 pub struct CustomSerdePspDirectoryEntryAttrs {
+	#[serde(rename = "type")]
 	pub type_: PspDirectoryEntryType,
 	#[serde(default = "zero")]
 	pub sub_program: u8,
@@ -1126,6 +1127,7 @@ fn sub_program_default() -> u8 {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 pub struct CustomSerdeBhdDirectoryEntryAttrs {
+	#[serde(rename = "type")]
 	pub type_: BhdDirectoryEntryType,
 	#[serde(default)]
 	pub region_type: BhdDirectoryEntryRegionType,
