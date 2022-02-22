@@ -445,7 +445,7 @@ impl<
 			.checked_add(size)
 			.ok_or(Error::DirectoryPayloadRangeCheck)?;
 		let (_, frontier) =
-			T::grow_to_erasable_block(frontier, frontier);
+			self.storage.grow_to_erasable_block(frontier, frontier);
 		Ok(frontier.try_into()?)
 	}
 
@@ -1246,14 +1246,14 @@ impl<
 		end: Location,
 	) -> Result<()> {
 		let (beginning, end) =
-			T::grow_to_erasable_block(beginning, end);
+			self.storage.grow_to_erasable_block(beginning, end);
 		// Check EFH no-overlap
 		let reference_beginning = Location::from(self.efh_beginning);
 		let reference_end = reference_beginning
 			.checked_add(Self::EFH_SIZE)
 			.ok_or(Error::Misaligned)?;
 		let (reference_beginning, reference_end) =
-			T::grow_to_erasable_block(
+			self.storage.grow_to_erasable_block(
 				reference_beginning,
 				reference_end,
 			);
@@ -1266,7 +1266,7 @@ impl<
 		match self.psp_directory() {
 			Ok(psp_directory) => {
 				let (reference_beginning, reference_end) =
-					T::grow_to_erasable_block(
+					self.storage.grow_to_erasable_block(
 						psp_directory
 							.directory_beginning(),
 						psp_directory.directory_end(),
@@ -1301,7 +1301,7 @@ impl<
 		let bhd_directories = self.bhd_directories()?;
 		for bhd_directory in bhd_directories {
 			let (reference_beginning, reference_end) =
-				T::grow_to_erasable_block(
+				self.storage.grow_to_erasable_block(
 					bhd_directory.directory_beginning(),
 					bhd_directory.directory_end(),
 				);
