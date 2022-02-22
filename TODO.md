@@ -1,5 +1,8 @@
 # Short-term
 
+* Maybe add AddressMode to create_bhd_directory
+* Maybe add AddressMode to create_psp_directory
+* Sanity-check try_into_raw_location.
 * Replace de_mmio by mmio_decode ?
 * Efs:create: Handle directory_address_mode.
 * Callers of location_of_source: Fix arguments.
