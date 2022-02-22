@@ -143,10 +143,18 @@ impl<
 						header.additional_info().base_address(),
 					)
 					.unwrap();
+					let directory_address_mode = header.additional_info().address_mode();
+					match directory_address_mode {
+						AddressMode::PhysicalAddress | AddressMode::EfsRelativeOffset | AddressMode::DirectoryRelativeOffset => {
+						}
+						_ => {
+							return Err(Error::DirectoryTypeMismatch)
+						}
+					}
 					Ok(Self {
 						storage,
 						location,
-						directory_address_mode: header.additional_info().address_mode(),
+						directory_address_mode,
 						header: *header,
 						directory_headers_size:
 							if contents_base == 0 {
@@ -930,7 +938,7 @@ pub struct Efs<
 > {
 	storage: T,
 	efh_beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-	efh: Efh,
+	pub efh: Efh,
 	amd_physical_mode_mmio_size: Option<u32>,
 }
 

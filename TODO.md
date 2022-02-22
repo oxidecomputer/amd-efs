@@ -1,8 +1,8 @@
 # Short-term
 
+* Check unwrap()
 * Efs:create: Handle directory_address_mode.
 * Callers of location_of_source: Fix arguments.
-* Check for Directory.AddressMode > 2 (= 3), and error out if it is
 * Do upper16.
 
 # Important
