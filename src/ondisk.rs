@@ -1,13 +1,13 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
 use crate::types::Error;
-use crate::types::LocationMode;
 use crate::types::Result;
-use crate::types::ValueOrLocation;
 use amd_flash::Location;
 use byteorder::LittleEndian;
 use core::convert::TryInto;
+use core::convert::TryFrom;
 use modular_bitfield::prelude::*;
+use num_traits::FromPrimitive;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 use crate::struct_accessors::make_accessors;
@@ -207,7 +207,7 @@ make_accessors! {
 		psp_directory_table_location_zen: LU32 : pub get u32 : pub set u32,
 		/// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BHD_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BHD_DIRECTORY_TABLE_MILAN instead.
 		pub bhd_directory_tables: [LU32; 3],
-		pub(crate) second_gen_efs: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome
+		pub(crate) efs_generations: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome; bit 1: Clear for Milan
 		bhd_directory_table_milan: LU32 : pub get u32 : pub set u32, // or Combo
 		_padding: LU32,
 		promontory_firmware_location: LU32 : pub get u32 : pub set u32,
@@ -230,7 +230,7 @@ impl Default for Efh {
 			psp_directory_table_location_naples: 0.into(),
 			psp_directory_table_location_zen: 0.into(), // probably invalid
 			bhd_directory_tables: [0.into(); 3],        // probably invalid
-			second_gen_efs: 0xffff_fffe.into(),
+			efs_generations: 0xffff_fffe.into(),
 			bhd_directory_table_milan: 0xffff_ffff.into(),
 			_padding: 0xffff_ffff.into(),
 			promontory_firmware_location: 0xffff_ffff.into(),
@@ -255,45 +255,18 @@ pub enum ProcessorGeneration {
 	Milan = 1,
 }
 
-pub(crate) fn mmio_decode(location_mode: LocationMode, value: u64) -> u64 {
-	match location_mode {
-		LocationMode::Offset => value,
-		LocationMode::Mmio => {
-			if value == 0 {
-				value
-			} else {
-				assert!(value & !0xff_ffff == 0xff00_0000);
-				(value & 0xff_ffff) as u64
-			}
-		}
-	}
-}
-
-pub(crate) fn mmio_encode(location_mode: LocationMode, value: u64) -> u64 {
-	match location_mode {
-		LocationMode::Offset => value,
-		LocationMode::Mmio => {
-			assert!(value <= 0xff_ffff);
-			value | 0xff00_0000
-		}
-	}
-}
-
 impl Efh {
 	/// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
+	/// Old (pre-Rome) boards had MMIO addresses instead of offsets in the slots.  Find out whether that's the case.
 	pub fn second_gen_efs(&self) -> bool {
-		self.second_gen_efs.get() & 1 == 0
+		self.efs_generations.get() & 1 == 0
 	}
 
 	/// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
 	/// Old (pre-Rome) boards had MMIO addresses instead of offsets in the slots.  Find out whether that's the case.
-	pub fn location_mode(&self) -> LocationMode {
-		match self.second_gen_efs.get() & 1 {
-			0 => LocationMode::Offset,
-			_ => LocationMode::Mmio,
-		}
+	pub fn physical_address_mode(&self) -> bool {
+		!self.second_gen_efs()
 	}
-
 	/// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
 	/// Note: generation 1 is Milan
 	pub fn compatible_with_processor_generation(
@@ -304,22 +277,21 @@ impl Efh {
 			ProcessorGeneration::Naples => {
 				// Naples didn't have generation flags yet, so make sure none of them are cleared.
 				// Naples didn't have normal (non-MMIO) offsets yet--so those also should be unavailable.
-				self.second_gen_efs.get() == 0xffff_ffff
+				self.efs_generations.get() == 0xffff_ffff
 			}
 			ProcessorGeneration::Rome => {
 				// Rome didn't have generation flags yet, so make sure none of them are cleared.
-				self.second_gen_efs.get() == 0xffff_fffe
+				self.efs_generations.get() == 0xffff_fffe
 			}
 			generation => {
 				let generation: u8 = generation as u8;
 				assert!(generation < 16);
-				self.second_gen_efs.get() & (1 << generation) ==
-					0
+				self.efs_generations.get() & (1 << generation) == 0
 			}
 		}
 	}
 
-	pub fn second_gen_efs_for_processor_generation(
+	pub fn efs_generations_for_processor_generation(
 		generation: ProcessorGeneration,
 	) -> u32 {
 		match generation {
@@ -336,7 +308,7 @@ impl Efh {
 	}
 }
 
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, Eq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 pub enum AddressMode {
 	/// Only supported for images <= 16 MiB.
@@ -345,11 +317,109 @@ pub enum AddressMode {
 	PhysicalAddress = 0,
 	EfsRelativeOffset = 1,       // x
 	DirectoryRelativeOffset = 2, // (x - Base)
-	ImageBaseRelativeOffset = 3, // x; ImageBaseRelativeOffset == DirectoryRelativeOffset; not Base
+	EntryRelativeOffset = 3, // x; ImageBaseRelativeOffset == DirectoryRelativeOffset; not Base
 }
+
+pub(crate) const WEAK_ADDRESS_MODE: AddressMode = AddressMode::DirectoryRelativeOffset;
 
 impl DummyErrorChecks for AddressMode {
 }
+
+#[derive(Debug)]
+pub enum ValueOrLocation {
+	Value(u64),
+	PhysicalAddress(u32),
+        EfsRelativeOffset(u32),
+        DirectoryRelativeOffset(u32),
+        EntryRelativeOffset(u32),
+}
+
+pub(crate) fn mmio_encode(value: Location, amd_physical_mode_mmio_size: Option<u32>) -> Result<u32> {
+	let mmio_address_lower = match amd_physical_mode_mmio_size {
+		None | Some(0) => {
+			return Err(Error::DirectoryTypeMismatch)
+		}
+		Some(x) => 1 + (0xFFFF_FFFFu32 - x),
+	};
+	Ok(value.checked_add(mmio_address_lower).ok_or(Error::DirectoryTypeMismatch)?)
+}
+
+// FIXME: remove 0-check?
+pub(crate) fn mmio_decode(value: u32, amd_physical_mode_mmio_size: u32) -> Result<u32> {
+	if value == 0 {
+		Ok(0)
+        } else {
+		let mmio_address_lower = match amd_physical_mode_mmio_size {
+			0 => {
+				return Err(Error::DirectoryTypeMismatch)
+			}
+			x => 1 + (0xFFFF_FFFFu32 - x)
+		};
+		if value >= mmio_address_lower {
+			Ok(value - mmio_address_lower)
+		} else {
+			Err(Error::DirectoryTypeMismatch)
+		}
+	}
+}
+
+impl ValueOrLocation {
+	pub(crate) fn new_from_raw_location(directory_address_mode: AddressMode, source: u64) -> Result<Self> {
+		let entry_address_mode = (source & 0xC000_0000_0000_0000) >> 62;
+		let entry_address_mode = AddressMode::from_u64(entry_address_mode).unwrap();
+		let value = u32::try_from(source & !0xC000_0000_0000_0000).map_err(|_| Error::DirectoryPayloadRangeCheck)?;
+		let address_mode = match directory_address_mode {
+			WEAK_ADDRESS_MODE => entry_address_mode,
+			x => x
+		};
+		Ok(match address_mode {
+			AddressMode::PhysicalAddress => Self::PhysicalAddress(value),
+			AddressMode::EfsRelativeOffset => Self::EfsRelativeOffset(value),
+			AddressMode::DirectoryRelativeOffset => Self::DirectoryRelativeOffset(value),
+			AddressMode::EntryRelativeOffset => Self::EntryRelativeOffset(value),
+		})
+	}
+	pub(crate) fn try_into_raw_location(&self, directory_address_mode: AddressMode) -> Result<u64> {
+		match self {
+			ValueOrLocation::Value(x) => {
+				Err(Error::EntryTypeMismatch)
+			}
+			ValueOrLocation::PhysicalAddress(x) => {
+				if directory_address_mode == AddressMode::PhysicalAddress || directory_address_mode == WEAK_ADDRESS_MODE {
+					let v = u64::from(*x) | 0;
+					Ok(v)
+				} else {
+					Err(Error::EntryTypeMismatch)
+				}
+			}
+			ValueOrLocation::EfsRelativeOffset(x) => {
+				if directory_address_mode == AddressMode::EfsRelativeOffset || directory_address_mode == WEAK_ADDRESS_MODE {
+					let v = u64::from(*x) | 0x4000_0000_0000_0000;
+					Ok(v)
+				} else {
+					Err(Error::EntryTypeMismatch)
+				}
+			}
+			ValueOrLocation::DirectoryRelativeOffset(x) => {
+				if directory_address_mode == AddressMode::DirectoryRelativeOffset || directory_address_mode == WEAK_ADDRESS_MODE {
+					let v = u64::from(*x) | 0x8000_0000_0000_0000;
+					Ok(v)
+				} else {
+					Err(Error::EntryTypeMismatch)
+				}
+			}
+			ValueOrLocation::EntryRelativeOffset(x) => {
+				if directory_address_mode == AddressMode::EntryRelativeOffset && directory_address_mode == WEAK_ADDRESS_MODE {
+					let v = u64::from(*x) | 0xC000_0000_0000_0000;
+					Ok(v)
+				} else {
+					Err(Error::EntryTypeMismatch)
+				}
+			}
+		}
+	}
+}
+
 
 /// XXX: If I move this to struct_accessors, it doesn't work anymore.
 
@@ -796,9 +866,9 @@ impl Default for PspDirectoryEntry {
 }
 
 pub trait DirectoryEntry {
-	fn source(&self) -> ValueOrLocation;
+	fn source(&self, directory_address_mode: AddressMode) -> Result<ValueOrLocation>;
 	fn size(&self) -> Option<u32>;
-	fn set_source(&mut self, value: ValueOrLocation) -> Result<()>;
+	fn set_source(&mut self, directory_address_mode: AddressMode, value: ValueOrLocation) -> Result<()>;
 }
 
 impl PspDirectoryEntry {
@@ -847,17 +917,16 @@ impl PspDirectoryEntry {
 }
 
 impl DirectoryEntry for PspDirectoryEntry {
-	fn source(&self) -> ValueOrLocation {
-		let size = self.size.get();
+	fn source(&self, directory_address_mode: AddressMode) -> Result<ValueOrLocation> {
 		let source = self.source.get();
-		let source = if size == Self::SIZE_VALUE_MARKER {
-			ValueOrLocation::Value(source)
+		let size = self.size.get();
+		if size == Self::SIZE_VALUE_MARKER {
+			Ok(ValueOrLocation::Value(source))
 		} else {
-			ValueOrLocation::Location(source)
-		};
-		source
+			ValueOrLocation::new_from_raw_location(directory_address_mode, source)
+		}
 	}
-	fn set_source(&mut self, value: ValueOrLocation) -> Result<()> {
+	fn set_source(&mut self, directory_address_mode: AddressMode, value: ValueOrLocation) -> Result<()> {
 		match value {
 			ValueOrLocation::Value(v) => {
 				if self.size.get() == Self::SIZE_VALUE_MARKER {
@@ -867,13 +936,10 @@ impl DirectoryEntry for PspDirectoryEntry {
 					Err(Error::EntryTypeMismatch)
 				}
 			}
-			ValueOrLocation::Location(v) => {
-				if self.size.get() == Self::SIZE_VALUE_MARKER {
-					Err(Error::EntryTypeMismatch)
-				} else {
-					self.source.set(v);
-					Ok(())
-				}
+			x => {
+				let v = x.try_into_raw_location(directory_address_mode)?;
+				self.source.set(v);
+				Ok(())
 			}
 		}
 	}
@@ -890,7 +956,8 @@ impl DirectoryEntry for PspDirectoryEntry {
 impl core::fmt::Debug for PspDirectoryEntry {
 	fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-		let source = self.source();
+		// DirectoryRelativeOffset (WEAK_ADDRESS_MODE) is the only one that's always overridable.
+		let source = self.source(WEAK_ADDRESS_MODE);
 		let size = self.size();
 		fmt.debug_struct("PspDirectoryEntry")
 			.field("attrs", &attrs)
@@ -1205,17 +1272,17 @@ impl BhdDirectoryEntry {
 }
 
 impl DirectoryEntry for BhdDirectoryEntry {
-	fn source(&self) -> ValueOrLocation {
+	fn source(&self, directory_address_mode: AddressMode) -> Result<ValueOrLocation> {
 		let size = self.size.get();
 		let source = self.source.get();
-		let source = if size == Self::SIZE_VALUE_MARKER {
-			ValueOrLocation::Value(source)
+		if size == Self::SIZE_VALUE_MARKER {
+			Ok(ValueOrLocation::Value(source))
 		} else {
-			ValueOrLocation::Location(source)
-		};
-		source
+			let source = self.source.get();
+			ValueOrLocation::new_from_raw_location(directory_address_mode, source)
+		}
 	}
-	fn set_source(&mut self, value: ValueOrLocation) -> Result<()> {
+	fn set_source(&mut self, directory_address_mode: AddressMode, value: ValueOrLocation) -> Result<()> {
 		match value {
 			ValueOrLocation::Value(v) => {
 				if self.size.get() == Self::SIZE_VALUE_MARKER {
@@ -1225,17 +1292,13 @@ impl DirectoryEntry for BhdDirectoryEntry {
 					Err(Error::EntryTypeMismatch)
 				}
 			}
-			ValueOrLocation::Location(v) => {
-				if self.size.get() == Self::SIZE_VALUE_MARKER {
-					Err(Error::EntryTypeMismatch)
-				} else {
-					self.source.set(v);
-					Ok(())
-				}
+			x => {
+				let v = x.try_into_raw_location(directory_address_mode)?;
+				self.source.set(v);
+				Ok(())
 			}
 		}
 	}
-
 	fn size(&self) -> Option<u32> {
 		let size = self.size.get();
 		if size == Self::SIZE_VALUE_MARKER {
@@ -1248,7 +1311,8 @@ impl DirectoryEntry for BhdDirectoryEntry {
 
 impl core::fmt::Debug for BhdDirectoryEntry {
 	fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		let source = self.source();
+		// DirectoryRelativeOffset (WEAK_ADDRESS_MODE) is the only one that's always overridable.
+		let source = self.source(WEAK_ADDRESS_MODE);
 		let destination_location = self.destination_location();
 		let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
 		let size = self.size();
@@ -1354,7 +1418,8 @@ make_accessors! {
 
 impl core::fmt::Debug for ComboDirectoryEntry {
 	fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		let source = self.source();
+		// DirectoryRelativeOffset (WEAK_ADDRESS_MODE) is the only one that's always overridable.
+		let source = self.source(WEAK_ADDRESS_MODE);
 		fmt.debug_struct("ComboDirectoryEntry")
 			.field("source", &source)
 			.finish()
@@ -1362,18 +1427,19 @@ impl core::fmt::Debug for ComboDirectoryEntry {
 }
 
 impl DirectoryEntry for ComboDirectoryEntry {
-	fn source(&self) -> ValueOrLocation {
+	fn source(&self, directory_address_mode: AddressMode) -> Result<ValueOrLocation> {
 		let source = self.source.get();
-		ValueOrLocation::Location(source)
+		ValueOrLocation::new_from_raw_location(directory_address_mode, source)
 	}
-	fn set_source(&mut self, value: ValueOrLocation) -> Result<()> {
+	fn set_source(&mut self, directory_address_mode: AddressMode, value: ValueOrLocation) -> Result<()> {
 		match value {
-			ValueOrLocation::Location(v) => {
+			ValueOrLocation::Value(v) => {
+				Err(Error::EntryTypeMismatch)
+			}
+			x => {
+				let v = x.try_into_raw_location(directory_address_mode)?;
 				self.source.set(v);
 				Ok(())
-			}
-			_ => {
-				Err(Error::DirectoryTypeMismatch)
 			}
 		}
 	}
