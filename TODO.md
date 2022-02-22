@@ -13,15 +13,6 @@
 * Connect via hubris ./drv/stm32h7-spi-server/src/main.rs
 * Is crossing erase page boundary when writing to the flash handled? FIXME
 * serde also create secondary directories ~
-* psp directory entry high 2 bits of location are address mode    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-* bhd directory entry high 2 bits of location are address mode   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  * Maybe change ValueOrLocation type?
-    * Depends on directory header's address_mode; if that is 2, then entry address mode exists; otherwise it's 0.
-      * AddressMode 0: X86 MMIO physical address; bits 63...56 are 0; so addr is 56 bits
-      * AddressMode 1: relative address to entire BIOS image; might be 16M binary relative offset; bit 63~56: 0x40
-      * AddressMode 2: relative address to PSP/BIOS directory; bit 63~56: 0x80
-      * AddressMode 3 (!) relative address to slot N (only valid on the entry); bit 63~56: 0xC0
-    * See #55758 page 120 for example
 * bhddirectoryentry should NOT have a new_value !!! According to the documentation, no.
   It's actually just a location, and the weird two high bits (see above).
 * Support directory headers somewhere else than the content
