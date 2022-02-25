@@ -3,7 +3,6 @@
 * Check unwrap()
 * Efs:create: Handle directory_address_mode.
 * Callers of location_of_source: Fix arguments.
-* Do upper16.
 
 # Important
 

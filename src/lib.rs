@@ -3,6 +3,7 @@
 mod amdfletcher32;
 mod efs;
 mod ondisk;
+mod adapters;
 mod struct_accessors;
 mod types;
 mod serializers;
