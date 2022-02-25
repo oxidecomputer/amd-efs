@@ -235,7 +235,7 @@ impl<
 					)
 					.with_address_mode(AddressMode::EfsRelativeOffset);
 				item.set_additional_info(additional_info);
-				storage.erase_and_write_block(beginning, &buf)?;
+				storage.erase_and_write_blocks(beginning, &buf)?;
 				Self::load(
 					storage,
 					Location::from(beginning),
@@ -315,7 +315,7 @@ impl<
 		}
 		match self
 			.storage
-			.erase_and_write_block(flash_input_block_address, &buf)
+			.erase_and_write_blocks(flash_input_block_address, &buf)
 		{
 			Ok(()) => Ok(()),
 			Err(e) => {
@@ -477,7 +477,7 @@ impl<
 		) {
 			Some(item) => {
 				*item = *entry;
-				self.storage.erase_and_write_block(
+				self.storage.erase_and_write_blocks(
 					beginning, &buf,
 				)?;
 			}
@@ -617,7 +617,7 @@ impl<
 				return Err(Error::DirectoryPayloadRangeCheck);
 			}
 			remaining_size = remaining_size.saturating_sub(count);
-			self.storage.erase_and_write_block(
+			self.storage.erase_and_write_blocks(
 				payload_position,
 				&buf,
 			)?;
@@ -1062,7 +1062,7 @@ impl<
 			}
 		}
 
-		storage.erase_and_write_block(
+		storage.erase_and_write_blocks(
 			ErasableLocation::<ERASABLE_BLOCK_SIZE>::try_from(
 				0xFA_0000u32,
 			)?,
@@ -1364,7 +1364,7 @@ impl<
 		}
 
 		self.storage
-			.erase_and_write_block(self.efh_beginning, &buf)?;
+			.erase_and_write_blocks(self.efh_beginning, &buf)?;
 		Ok(())
 	}
 
