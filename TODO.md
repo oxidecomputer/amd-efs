@@ -28,7 +28,6 @@
   * Maybe adapt that.  Otherwise we have funny problems using the result of getters to store into JSON--since the JSON type is actually the right size (!).
 * Don't allow creation of directory entry that are already there (unique key = (type, subprogram, instance)) ; what about rom_id ?!
 * bios_directories: Return Err directly if appropriate
-* Make rom_id more useful?  (maybe not?)
 
 # Later with Flash
 
