@@ -20,8 +20,8 @@
 * `Serde` helper structs necessarily use `modular-bitfield`'s too-large `InOut` registers (for example `u8` for `B5`). Therefore, it's possible for the user to set a way-too-large value using JSON.
   * Fixing this would require adapting `modular-bitfield`'s derive macro, and using `ux_serde` or whatever new thing is now en vogue.
 * DirectoryAdditionalInfo: Most are in 4 kiB units and have strange bit count. Maybe make those (max_size, base_address) nicer.
-* BhdDirectoryEntryAttrs: instance is u4; sub_program is u3; rom_id is u2.
-  * Making instance, sub_program and rom_id enumerated would prevent those.
+* BhdDirectoryEntryAttrs: instance is u4; sub_program is u3.
+  * Making instance, sub_program enumerated would prevent those.
     * But that's a workaround.
 * modular-bitfield: generate_specifier_for: "let in_out =" too coarse-grained.
   * Maybe adapt that.  Otherwise we have funny problems using the result of getters to store into JSON--since the JSON type is actually the right size (!).
