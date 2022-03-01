@@ -457,7 +457,7 @@ macro_rules! make_bitfield_serde {(
 		pub fn builder() -> Self {
 			Self::default()
 		}
-		pub fn build(&mut self) -> Self {
+		pub fn build(&self) -> Self {
 			self.clone()
 		}
 	}
