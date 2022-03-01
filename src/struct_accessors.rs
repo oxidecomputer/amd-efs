@@ -186,6 +186,12 @@ macro_rules! make_accessors {(
 	}
 
 	impl $StructName {
+		pub fn builder() -> Self {
+			Self::default()
+		}
+		pub fn build(&mut self) -> Self {
+			self.clone()
+		}
 		$($(
 			#[inline]
 			$getter_vis
@@ -206,7 +212,7 @@ macro_rules! make_accessors {(
 				  #[must_use]
 				  $setter_vis
 				  fn [<with_ $field_name>]<'a>(self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
-					  let mut result = self;
+					  let result = self;
 					  result.$field_name.set1(value);
 					  result
 				  }

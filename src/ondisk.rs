@@ -453,6 +453,15 @@ macro_rules! make_bitfield_serde {(
 		)*
 	}
 
+	impl $StructName {
+		pub fn builder() -> Self {
+			Self::default()
+		}
+		pub fn build(&mut self) -> Self {
+			self.clone()
+		}
+	}
+
 	paste::paste! {
 		#[derive(serde::Deserialize, serde::Serialize)]
 		#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
@@ -1412,6 +1421,16 @@ make_accessors! {
 		key: LU32, // 0-PSP ID; 1-chip family ID
 		value: LU32,
 		source: LU64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
+	}
+}
+
+impl Default for ComboDirectoryEntry {
+	fn default() -> Self {
+		Self {
+			key: 0.into(),
+			value: 0.into(), // probably invalid
+			source: 0.into(), // probably invalid
+		}
 	}
 }
 

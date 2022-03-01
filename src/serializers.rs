@@ -14,11 +14,11 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 			fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
 			where D: serde::de::Deserializer<'de>, {
 				let config = $SerdeStructName::deserialize(deserializer)?;
-				Ok($StructName::default()
+				Ok($StructName::builder()
 				$(
 				.[<with_ $field_name>](config.$field_name.into())
 				)*
-				.clone())
+				.build())
 		        }
 		}
 		impl serde::Serialize for $StructName {
