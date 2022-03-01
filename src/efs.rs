@@ -783,7 +783,6 @@ impl<
 		&mut self,
 		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
 		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-		amd_physical_mode_mmio_size: Option<u32>,
 	) -> Result<Self> {
 		// Find existing SecondLevelDirectory, error out if found.
 		let entries = self.entries();
