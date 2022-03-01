@@ -17,7 +17,8 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 				Ok($StructName::default()
 				$(
 				.[<with_ $field_name>](config.$field_name.into())
-				)*)
+				)*
+				.clone())
 		        }
 		}
 		impl serde::Serialize for $StructName {
