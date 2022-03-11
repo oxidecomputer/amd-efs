@@ -506,12 +506,11 @@ impl<
 			// there's still space for the directory entry
 			let result: Option<
 				ErasableLocation<ERASABLE_BLOCK_SIZE>,
-			>;
-			match entry.size() {
-				None => result = None,
+			> = match entry.size() {
+				None => None,
 				Some(size) => {
 					if size == 0 {
-						result = None
+						None
 					} else {
 						let beginning =
 							match payload_position {
@@ -521,10 +520,10 @@ impl<
 									size,
 								)?,
 							};
-						result = Some(beginning)
+						Some(beginning)
 					}
 				}
-			}
+			};
 			let mut entry = *entry;
 			match result {
 				None => {}
