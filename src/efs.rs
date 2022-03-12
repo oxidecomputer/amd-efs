@@ -29,7 +29,7 @@ pub struct DirectoryIter<
 > {
 	storage: &'a T,
 	directory_address_mode: AddressMode,
-	beginning: Location, // current item (directory entry)
+	current: Location, // pointer to current item (directory entry)
 	end: Location,
 	total_entries: u32,
 	index: u32,
@@ -49,10 +49,9 @@ impl<
 			let mut buf: [u8; ERASABLE_BLOCK_SIZE] =
 				[0xff; ERASABLE_BLOCK_SIZE];
 			let buf = &mut buf[.. size_of::<Item>()];
-			self.storage.read_exact(self.beginning, buf).ok()?;
-			// FIXME: range check so we don't fall off the end!
+			self.storage.read_exact(self.current, buf).ok()?;
 			let result = header_from_collection::<Item>(buf)?; // TODO: Check for errors
-			self.beginning += size_of::<Item>() as u32; // FIXME: range check
+			self.current = self.current.checked_add(size_of::<Item>() as u32)?;
 			self.index += 1;
 			let q = *result;
 			Some(q)
@@ -369,7 +368,7 @@ impl<
 		DirectoryIter::<Item, T, ERASABLE_BLOCK_SIZE> {
 			storage: self.storage,
 			directory_address_mode: self.directory_address_mode,
-			beginning: self.directory_beginning(),
+			current: self.directory_beginning(),
 			end: self.directory_end(), // actually, much earlier--this here is the allocation, not the actual size
 			total_entries: self.header.total_entries(),
 			index: 0u32,
