@@ -70,6 +70,7 @@ pub struct Directory<
 	Attrs: Sized,
 	const _SPI_BLOCK_SIZE: usize,
 	const ERASABLE_BLOCK_SIZE: usize,
+	const MainHeaderSize: usize,
 > {
 	storage: &'a T,
 	location: Location, // ideally ErasableLocation<ERASABLE_BLOCK_SIZE>--but that's impossible with AMD-generated images.
@@ -95,8 +96,9 @@ impl<
 		Attrs: Sized,
 		const SPI_BLOCK_SIZE: usize,
 		const ERASABLE_BLOCK_SIZE: usize,
+		const MainHeaderSize: usize,
 	>
-	Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE>
+	Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE, MainHeaderSize>
 {
 	const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
 	const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but then good luck with modifying the first entry payload without clobbering the directory that comes right before it.
@@ -129,12 +131,11 @@ impl<
 		location: Location,
 		amd_physical_mode_mmio_size: Option<u32>,
 	) -> Result<Self> {
-		let mut buf: [u8; ERASABLE_BLOCK_SIZE] =
-			[0xff; ERASABLE_BLOCK_SIZE];
+		let mut buf: [u8; MainHeaderSize] =
+			[0xff; MainHeaderSize];
+		assert!(MainHeaderSize == size_of::<MainHeader>()); // TODO: move to compile-time
 		storage.read_exact(location, &mut buf)?;
-		match header_from_collection::<MainHeader>(
-			&buf[.. size_of::<MainHeader>()],
-		) {
+		match header_from_collection::<MainHeader>(&buf[..]) {
 			Some(header) => {
 				let cookie = header.cookie();
 				if cookie == *b"$PSP" ||
@@ -639,6 +640,7 @@ pub type PspDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	PspDirectoryEntryAttrs,
 	0x3000,
 	ERASABLE_BLOCK_SIZE,
+	{ size_of::<PspDirectoryHeader>() },
 >;
 pub type BhdDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	'a,
@@ -648,6 +650,7 @@ pub type BhdDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	BhdDirectoryEntryAttrs,
 	0x1000,
 	ERASABLE_BLOCK_SIZE,
+	{ size_of::<BhdDirectoryHeader>() },
 >;
 pub type ComboDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	'a,
@@ -657,6 +660,7 @@ pub type ComboDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	(),
 	0x1000,
 	ERASABLE_BLOCK_SIZE,
+	{ size_of::<ComboDirectoryHeader>() },
 >;
 
 impl<
@@ -675,6 +679,7 @@ impl<
 		PspDirectoryEntryAttrs,
 		SPI_BLOCK_SIZE,
 		ERASABLE_BLOCK_SIZE,
+		{ size_of::<PspDirectoryHeader>() },
 	>
 {
 	// Note: Function is crate-private because there's no overlap checking
@@ -777,6 +782,7 @@ impl<
 		BhdDirectoryEntryAttrs,
 		SPI_BLOCK_SIZE,
 		ERASABLE_BLOCK_SIZE,
+		{ size_of::<BhdDirectoryHeader>() },
 	>
 {
 	// Note: Function is crate-private because there's no overlap checking
