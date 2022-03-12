@@ -74,7 +74,7 @@ pub struct Directory<
 	storage: &'a T,
 	location: Location, // ideally ErasableLocation<ERASABLE_BLOCK_SIZE>--but that's impossible with AMD-generated images.
 	directory_address_mode: AddressMode,
-	pub header: MainHeader, // FIXME: make read-only
+	header: MainHeader,
 	directory_headers_size: u32,
 	// On AMD, this field specifies how much of the memory area under
 	// address 2**32 (towards lower addresses) is used to memory-map
@@ -104,6 +104,9 @@ impl<
 		as usize) - size_of::<MainHeader>(
 	)) / size_of::<Item>();
 
+	pub fn header(&self) -> MainHeader {
+		self.header
+	}
 	pub fn directory_address_mode(&self) -> AddressMode {
 		self.directory_address_mode
 	}
