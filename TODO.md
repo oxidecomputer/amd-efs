@@ -1,13 +1,16 @@
 # Short-term
 
 * Check unwrap()
+* Is crossing erase page boundary when writing to the flash handled? FIXME
+  * write_directory_entry should instead have two caches (one for dirty check)
+    * can it be assumed that between the directory and the payload is nothing? I don't think so. There could be payload there!
+      * so erase_and_write_blocks might want to recover whatever is there (maybe with a flag)
 * Efs:create: Handle directory_address_mode.
 * Callers of location_of_source: Fix arguments.
 
 # Important
 
 * Connect via hubris ./drv/stm32h7-spi-server/src/main.rs
-* Is crossing erase page boundary when writing to the flash handled? FIXME
 * serde also create secondary directories ~
 * Support directory headers somewhere else than the content
   * directory_beginning, contents_beginning: Figure out what exactly happens when base_address /= 0.  Does it mean the entries move there, too?
