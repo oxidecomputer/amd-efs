@@ -226,6 +226,9 @@ macro_rules! make_accessors {(
 		#[doc(hidden)]
 		#[derive(serde::Serialize, serde::Deserialize)]
 		#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
+		// Make it possible to just delegate serde entirely to
+		// this struct instead of $StructName
+		#[serde(rename = "" $StructName)]
 		// Doing remoting automatically would make it impossible for the user to use another one.
 		// Since the config format presumably needs to be
 		// backward-compatible, that wouldn't be such a great idea.
