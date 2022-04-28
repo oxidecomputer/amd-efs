@@ -1049,6 +1049,7 @@ impl<
 	pub fn create(
 		mut storage: T,
 		processor_generation: ProcessorGeneration,
+		efh_beginning: Location,
 		amd_physical_mode_mmio_size: Option<u32>,
 	) -> Result<Self> {
 		let mut buf: [u8; ERASABLE_BLOCK_SIZE] =
@@ -1070,7 +1071,7 @@ impl<
 
 		storage.erase_and_write_blocks(
 			ErasableLocation::<ERASABLE_BLOCK_SIZE>::try_from(
-				0xFA_0000u32,
+				efh_beginning,
 			)?,
 			&buf,
 		)?;
