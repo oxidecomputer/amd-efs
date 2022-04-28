@@ -2,6 +2,7 @@
 pub enum Error {
 	Io(amd_flash::Error),
 	EfsHeaderNotFound,
+	EfsRangeCheck,
 	PspDirectoryHeaderNotFound,
 	BhdDirectoryHeaderNotFound,
 	DirectoryRangeCheck,

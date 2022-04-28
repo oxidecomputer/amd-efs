@@ -1052,6 +1052,10 @@ impl<
 		efh_beginning: Location,
 		amd_physical_mode_mmio_size: Option<u32>,
 	) -> Result<Self> {
+		if !EFH_POSITION.contains(&efh_beginning) {
+			return Err(Error::EfsRangeCheck);
+		}
+
 		let mut buf: [u8; ERASABLE_BLOCK_SIZE] =
 			[0xFF; ERASABLE_BLOCK_SIZE];
 		match header_from_collection_mut(&mut buf[..]) {
