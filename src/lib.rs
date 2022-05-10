@@ -15,6 +15,7 @@ pub use ondisk::*;
 pub use types::Error;
 pub use types::Result;
 pub use types::ValueOrLocation;
+pub use crate::efs::DirectoryFrontend;
 
 #[cfg(test)]
 mod tests {
