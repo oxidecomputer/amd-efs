@@ -306,6 +306,17 @@ impl Efh {
 			}
 		}
 	}
+
+	/// If the result is unique, returns the processor generation this
+	/// Embedded Firmware is for.
+	pub fn processor_generation(&self) -> Option<ProcessorGeneration> {
+		for v in [ProcessorGeneration::Milan, ProcessorGeneration::Rome, ProcessorGeneration::Naples] {
+			if Self::efs_generations_for_processor_generation(v) == self.efs_generations.get() {
+				return Some(v);
+			}
+		}
+		None
+	}
 }
 
 #[derive(Debug, PartialEq, Eq, FromPrimitive, Clone, Copy, BitfieldSpecifier, serde::Deserialize, serde::Serialize)]
