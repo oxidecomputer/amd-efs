@@ -634,6 +634,49 @@ impl<
 		}
 		Ok(())
 	}
+
+	//
+	// The comment in efs.rs:add_payload() states that the function passed into
+	// directory.add_blob_entry() must not return a result smaller than the length
+	// of the buffer passed into it unless there are no more contents.  This means
+	// we cannot expect it to be called repeatedly, which is to say that we must
+	// loop ourselves until the reader we are given returns no more data.  This
+	// matters because it is *not* an error for a reader to return less data than
+	// would have filled the buffer it was given, even if more data might be
+	// available.
+	//
+	#[cfg(feature = "std")]
+	pub fn add_from_reader_with_custom_size<Source>(
+		&mut self,
+		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
+		attrs: &Attrs,
+		size: usize,
+		source: &mut Source,
+		ram_destination_address: Option<u64>,
+	) -> Result<()>
+	where
+	    T: std::io::Read,
+	{
+		self.add_blob_entry(
+			payload_position,
+			attrs,
+			size.try_into().unwrap(),
+	                ram_destination_address,
+			&mut |buf: &mut [u8]| {
+				let mut cursor = 0;
+				loop {
+					let bytes = source
+						.read(&mut buf[cursor ..])
+						.map_err(|_| amd_efs::Error::Marshal)?;
+					if bytes == 0 {
+						return Ok(cursor);
+					}
+					cursor += bytes;
+				}
+			},
+		)?;
+		Ok(())
+	}
 }
 
 pub type PspDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
