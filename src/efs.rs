@@ -61,6 +61,58 @@ impl<
 	}
 }
 
+pub trait DirectoryFrontend<Attrs: Sized, const ERASABLE_BLOCK_SIZE: usize> {
+        fn add_blob_entry(
+                &mut self,
+                payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
+                attrs: &Attrs,
+                size: u32,
+		destination_location: Option<u64>,
+                iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>
+        ) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>>;
+
+	//
+	// The comment in efs.rs:add_payload() states that the function passed into
+	// directory.add_blob_entry() must not return a result smaller than the length
+	// of the buffer passed into it unless there are no more contents.  This means
+	// we cannot expect it to be called repeatedly, which is to say that we must
+	// loop ourselves until the reader we are given returns no more data.  This
+	// matters because it is *not* an error for a reader to return less data than
+	// would have filled the buffer it was given, even if more data might be
+	// available.
+	//
+	#[cfg(feature = "std")]
+	fn add_from_reader_with_custom_size<Source: std::io::Read>(
+		&mut self,
+		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
+		attrs: &Attrs,
+		size: usize,
+		source: &mut Source,
+		ram_destination_address: Option<u64>,
+	) -> Result<()>
+	{
+		self.add_blob_entry(
+			payload_position,
+			attrs,
+			size.try_into().unwrap(),
+			ram_destination_address,
+			&mut |buf: &mut [u8]| {
+				let mut cursor = 0;
+				loop {
+					let bytes = source
+					    .read(&mut buf[cursor ..])
+					    .map_err(|_| Error::Marshal)?;
+					if bytes == 0 {
+						return Ok(cursor);
+					}
+					cursor += bytes;
+				}
+			},
+		)?;
+		Ok(())
+	}
+}
+
 // TODO: split into Directory and DirectoryContents (disjunct) if requested in additional_info.
 pub struct Directory<
 	'a,
@@ -737,14 +789,39 @@ impl<
 			_ => Err(Error::EntryTypeMismatch),
 		}
 	}
+}
 
-	pub fn add_blob_entry(
+impl<
+		'a,
+		T: 'a
+			+ FlashRead<ERASABLE_BLOCK_SIZE>
+			+ FlashWrite<ERASABLE_BLOCK_SIZE>,
+		const SPI_BLOCK_SIZE: usize,
+		const ERASABLE_BLOCK_SIZE: usize,
+	>
+DirectoryFrontend<PspDirectoryEntryAttrs, ERASABLE_BLOCK_SIZE> for
+	Directory<
+		'a,
+		PspDirectoryHeader,
+		PspDirectoryEntry,
+		T,
+		PspDirectoryEntryAttrs,
+		SPI_BLOCK_SIZE,
+		ERASABLE_BLOCK_SIZE,
+		{ size_of::<PspDirectoryHeader>() },
+	>
+{
+	fn add_blob_entry(
 		&mut self,
 		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
 		attrs: &PspDirectoryEntryAttrs,
 		size: u32,
+		destination_location: Option<u64>,
 		iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>,
 	) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
+		if destination_location.is_some() {
+		    return Err(Error::EntryTypeMismatch)
+		}
 		let xpayload_position = self.add_entry(
 			payload_position,
 			&PspDirectoryEntry::new_payload(
@@ -860,8 +937,29 @@ impl<
 			_ => Err(Error::EntryTypeMismatch),
 		}
 	}
+}
 
-	pub fn add_blob_entry(
+impl<
+		'a,
+		T: 'a
+			+ FlashRead<ERASABLE_BLOCK_SIZE>
+			+ FlashWrite<ERASABLE_BLOCK_SIZE>,
+		const SPI_BLOCK_SIZE: usize,
+		const ERASABLE_BLOCK_SIZE: usize,
+	>
+DirectoryFrontend<BhdDirectoryEntryAttrs, ERASABLE_BLOCK_SIZE> for
+	Directory<
+		'a,
+		BhdDirectoryHeader,
+		BhdDirectoryEntry,
+		T,
+		BhdDirectoryEntryAttrs,
+		SPI_BLOCK_SIZE,
+		ERASABLE_BLOCK_SIZE,
+		{ size_of::<BhdDirectoryHeader>() },
+	>
+{
+	fn add_blob_entry(
 		&mut self,
 		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
 		attrs: &BhdDirectoryEntryAttrs,
