@@ -417,6 +417,10 @@ impl<
 		}
 	}
 
+	pub fn entry_location(&self, entry: &dyn DirectoryEntry) -> Result<Location> {
+		self.location_of_source(entry.source(self.directory_address_mode)?, 0/*FIXME*/)
+	}
+
 	pub(crate) fn find_payload_empty_slot(
 		&self,
 		size: u32,
@@ -1209,7 +1213,7 @@ impl<
 		for entry in main_directory.entries() {
 			match entry.type_or_err() {
 				Ok(PspDirectoryEntryType::SecondLevelDirectory) => {
-					let psp_directory_table_location = main_directory.location_of_source(entry.source(main_directory.directory_address_mode)?, 0/*FIXME*/)?;
+					let psp_directory_table_location = main_directory.entry_location(&entry)?;
 					let directory = PspDirectory::load(
 						&self.storage,
 						psp_directory_table_location
