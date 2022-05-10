@@ -15,7 +15,6 @@ use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
 use crate::struct_accessors::DummyErrorChecks;
 use strum_macros::EnumString;
-use strum::IntoEnumIterator;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 //use crate::configs;
 
@@ -306,17 +305,6 @@ impl Efh {
 				0xffff_fffe & !(1 << generation)
 			}
 		}
-	}
-
-	/// If the result is unique, returns the processor generation this
-	/// Embedded Firmware is for.
-	pub fn processor_generation(&self) -> Option<ProcessorGeneration> {
-		for v in ProcessorGeneration::iter() {
-			if Self::efs_generations_for_processor_generation(v) == self.efs_generations.get() {
-				return Some(v);
-			}
-		}
-		None
 	}
 }
 

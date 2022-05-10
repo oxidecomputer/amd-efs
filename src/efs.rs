@@ -1665,10 +1665,4 @@ impl<
 		self.ensure_no_overlap(Location::from(beginning), Location::from(end))?;
 		bhd_directory.create_subdirectory(beginning, end)
 	}*/
-
-	/// If the result is unique, returns the processor generation this
-	/// Embedded Firmware is for.
-	pub fn processor_generation(&self) -> Option<ProcessorGeneration> {
-		self.efh.processor_generation()
-	}
 }
