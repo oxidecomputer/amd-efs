@@ -1366,28 +1366,28 @@ impl<
 		}
 		let efh = &self.efh;
 		let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
-		let INVALID_POSITION: u32 = 0xffff_ffff;
+		let invalid_position = 0xffff_ffffu32;
 		let positions = match processor_generation {
 			Some(ProcessorGeneration::Milan) => [
-				efh.bhd_directory_table_milan().ok().or(Some(INVALID_POSITION)).unwrap(),
-				INVALID_POSITION,
-				INVALID_POSITION,
-				INVALID_POSITION,
+				efh.bhd_directory_table_milan().ok().or(Some(invalid_position)).unwrap(),
+				invalid_position,
+				invalid_position,
+				invalid_position,
 			],
 			Some(ProcessorGeneration::Rome) => [
 				de_mmio(efh.bhd_directory_tables[2].get(), amd_physical_mode_mmio_size),
-				INVALID_POSITION,
-				INVALID_POSITION,
-				INVALID_POSITION,
+				invalid_position,
+				invalid_position,
+				invalid_position,
 			],
 			Some(ProcessorGeneration::Naples) => [
 				de_mmio(efh.bhd_directory_tables[0].get(), amd_physical_mode_mmio_size),
-				INVALID_POSITION,
-				INVALID_POSITION,
-				INVALID_POSITION,
+				invalid_position,
+				invalid_position,
+				invalid_position,
 			],
 			None => [ // allow all (used for example for overlap checking)
-				efh.bhd_directory_table_milan().ok().or(Some(INVALID_POSITION)).unwrap(),
+				efh.bhd_directory_table_milan().ok().or(Some(invalid_position)).unwrap(),
 
 				de_mmio(efh.bhd_directory_tables[2].get(), amd_physical_mode_mmio_size),
 				de_mmio(efh.bhd_directory_tables[1].get(), amd_physical_mode_mmio_size),
