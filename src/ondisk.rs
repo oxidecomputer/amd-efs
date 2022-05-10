@@ -15,6 +15,7 @@ use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
 use crate::struct_accessors::DummyErrorChecks;
 use strum_macros::EnumString;
+use strum::IntoEnumIterator;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 //use crate::configs;
 
@@ -246,7 +247,7 @@ impl Default for Efh {
 }
 
 #[repr(i8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString, serde::Deserialize, serde::Serialize, strum_macros::EnumIter)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub enum ProcessorGeneration {
@@ -310,7 +311,7 @@ impl Efh {
 	/// If the result is unique, returns the processor generation this
 	/// Embedded Firmware is for.
 	pub fn processor_generation(&self) -> Option<ProcessorGeneration> {
-		for v in [ProcessorGeneration::Milan, ProcessorGeneration::Rome, ProcessorGeneration::Naples] {
+		for v in ProcessorGeneration::iter() {
 			if Self::efs_generations_for_processor_generation(v) == self.efs_generations.get() {
 				return Some(v);
 			}
