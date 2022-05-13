@@ -1039,6 +1039,13 @@ impl<
 	}
 }
 
+pub const fn preferred_efh_location(processor_generation: ProcessorGeneration) -> Location {
+	match processor_generation {
+		ProcessorGeneration::Naples => 0x2_0000,
+		ProcessorGeneration::Rome | ProcessorGeneration::Milan => 0xFA_0000,
+	}
+}
+
 // TODO: Borrow storage.
 pub struct Efs<
 	T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>,
@@ -1154,7 +1161,10 @@ impl<
 		efh_beginning: Location,
 		amd_physical_mode_mmio_size: Option<u32>,
 	) -> Result<Self> {
-		if !EFH_POSITION.contains(&efh_beginning) {
+		if !EFH_POSITION.contains(&efh_beginning) ||
+			preferred_efh_location(processor_generation) !=
+				efh_beginning
+		{
 			return Err(Error::EfsRangeCheck);
 		}
 
