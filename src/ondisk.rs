@@ -248,7 +248,6 @@ impl Default for Efh {
 #[repr(i8)]
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, EnumString, serde::Deserialize, serde::Serialize, strum_macros::EnumIter)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
-#[non_exhaustive]
 pub enum ProcessorGeneration {
 	Naples = -1,
 	Rome = 0,
