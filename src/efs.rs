@@ -1333,9 +1333,12 @@ impl<
 		Err(Error::PspDirectoryHeaderNotFound)
 	}
 
-	/// Returns an iterator over level 1 BHD directories
+	/// Returns an iterator over level 1 BHD directories.
+	/// If PROCESSOR_GENERATION is Some, then only return the directories
+	/// matching that generation.
 	pub fn bhd_directories(
 		&self,
+		processor_generation: Option<ProcessorGeneration>,
 	) -> Result<EfhBhdsIterator<T, ERASABLE_BLOCK_SIZE>> {
 		fn de_mmio(v: u32, amd_physical_mode_mmio_size: Option<u32>) -> u32 {
 			if v == 0xffff_ffff || v == 0 {
@@ -1363,12 +1366,34 @@ impl<
 		}
 		let efh = &self.efh;
 		let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
-		let positions = [
-			efh.bhd_directory_table_milan().ok().or(Some(0xffff_ffff)).unwrap(),
-			de_mmio(efh.bhd_directory_tables[2].get(), amd_physical_mode_mmio_size),
-			de_mmio(efh.bhd_directory_tables[1].get(), amd_physical_mode_mmio_size),
-			de_mmio(efh.bhd_directory_tables[0].get(), amd_physical_mode_mmio_size),
-		]; // the latter are physical addresses
+		let invalid_position = 0xffff_ffffu32;
+		let positions = match processor_generation {
+			Some(ProcessorGeneration::Milan) => [
+				efh.bhd_directory_table_milan().ok().or(Some(invalid_position)).unwrap(),
+				invalid_position,
+				invalid_position,
+				invalid_position,
+			],
+			Some(ProcessorGeneration::Rome) => [
+				de_mmio(efh.bhd_directory_tables[2].get(), amd_physical_mode_mmio_size),
+				invalid_position,
+				invalid_position,
+				invalid_position,
+			],
+			Some(ProcessorGeneration::Naples) => [
+				de_mmio(efh.bhd_directory_tables[0].get(), amd_physical_mode_mmio_size),
+				invalid_position,
+				invalid_position,
+				invalid_position,
+			],
+			None => [ // allow all (used for example for overlap checking)
+				efh.bhd_directory_table_milan().ok().or(Some(invalid_position)).unwrap(),
+
+				de_mmio(efh.bhd_directory_tables[2].get(), amd_physical_mode_mmio_size),
+				de_mmio(efh.bhd_directory_tables[1].get(), amd_physical_mode_mmio_size),
+				de_mmio(efh.bhd_directory_tables[0].get(), amd_physical_mode_mmio_size),
+			]
+		};
 		Ok(EfhBhdsIterator {
 			storage: &self.storage,
 			physical_address_mode: self.physical_address_mode(),
@@ -1376,6 +1401,17 @@ impl<
 			index_into_positions: 0,
 			amd_physical_mode_mmio_size: self.amd_physical_mode_mmio_size,
 		})
+	}
+
+        /// Return the directory matching PROCESSOR_GENERATION,
+        /// or any directory if that is None.
+	pub fn bhd_directory(&self, processor_generation: Option<ProcessorGeneration>)
+	-> Result<BhdDirectory<T, ERASABLE_BLOCK_SIZE>>
+	{
+		for bhd_directory in self.bhd_directories(processor_generation).unwrap() {
+		    return Ok(bhd_directory);
+		}
+		Err(Error::BhdDirectoryHeaderNotFound)
 	}
 
 	// Make sure there's no overlap (even when rounded to entire erasure blocks)
@@ -1437,7 +1473,7 @@ impl<
 				return Err(e);
 			}
 		}
-		let bhd_directories = self.bhd_directories()?;
+		let bhd_directories = self.bhd_directories(None)?;
 		for bhd_directory in bhd_directories {
 			let (reference_beginning, reference_end) =
 				self.storage.grow_to_erasable_block(
@@ -1529,7 +1565,7 @@ impl<
 				return Err(Error::DirectoryTypeMismatch)
 			}
 		}
-		match self.bhd_directories() {
+		match self.bhd_directories(None) {
 			Ok(items) => {
 				for directory in items {
 					// TODO: Ensure that we don't have too many similar ones
