@@ -79,7 +79,6 @@ pub enum SpiFastSpeedNew {
 
 make_accessors! {
 	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	#[repr(C, packed)]
 	pub struct EfhBulldozerSpiMode {
 		read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
@@ -121,7 +120,6 @@ pub enum SpiNaplesMicronMode {
 
 make_accessors! {
 	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	#[repr(C, packed)]
 	pub struct EfhNaplesSpiMode {
 		read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
@@ -176,7 +174,6 @@ pub enum SpiRomeMicronMode {
 
 make_accessors! {
 	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	#[repr(C, packed)]
 	pub struct EfhRomeSpiMode {
 		read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
@@ -829,7 +826,6 @@ make_bitfield_serde! {
 	#[bitfield(bits = 32)]
 	#[repr(u32)]
 	#[derive(Copy, Clone, Debug)]
-	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	pub struct PspDirectoryEntryAttrs {
 		#[bits = 8]
 		pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
@@ -1095,7 +1091,6 @@ make_bitfield_serde! {
 	#[bitfield(bits = 32)]
 	#[repr(u32)]
 	#[derive(Copy, Clone, Debug)]
-	#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 	pub struct BhdDirectoryEntryAttrs {
 		#[bits = 8]
 		pub type_: BhdDirectoryEntryType : pub get BhdDirectoryEntryType : pub set BhdDirectoryEntryType,
