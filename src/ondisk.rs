@@ -167,8 +167,8 @@ impl Setter<EfhRomeSpiMode> for EfhRomeSpiMode {
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub enum SpiRomeMicronMode {
-	RomeSupportMicron = 0x55,
-	RomeForceMicron = 0xaa,
+	SupportMicron = 0x55,
+	ForceMicron = 0xaa,
 	DoNothing = 0xff,
 }
 
