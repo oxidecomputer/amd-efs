@@ -3,6 +3,8 @@
 // Note that if too many fields are private, it means that those are not in the proxy struct in the first place. This might cause problems.
 // Also, serialization can fail if the nice simple user-visible type cannot represent what we are doing.
 
+#![cfg(feature = "serde")]
+
 use crate::ondisk::*;
 use crate::struct_accessors::DummyErrorChecks;
 
@@ -31,7 +33,7 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 				}.serialize(serializer)
 			}
 		}
-		#[cfg(feature = "std")]
+		#[cfg(feature = "schemars")]
 		impl schemars::JsonSchema for $StructName {
 			fn schema_name() -> String {
 				$SerdeStructName::schema_name()
