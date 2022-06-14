@@ -30,3 +30,5 @@ zerocopy = "0.6"
 [features]
 default = []
 std = []
+serde = []
+schemars = ["std", "serde"]
