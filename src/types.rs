@@ -23,12 +23,6 @@ impl From<amd_flash::Error> for Error {
 	}
 }
 
-#[derive(Debug)]
-pub enum ValueOrLocation {
-	Value(u64),
-	Location(u64),
-}
-
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum LocationMode {

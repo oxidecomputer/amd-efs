@@ -5,11 +5,12 @@ pub use crate::ondisk::ProcessorGeneration;
 use crate::ondisk::EFH_POSITION;
 use crate::ondisk::{
 	mmio_decode, mmio_encode, AddressMode, BhdDirectoryEntry,
-	BhdDirectoryEntryAttrs, BhdDirectoryEntryType, BhdDirectoryHeader,
+	BhdDirectoryEntryType, BhdDirectoryHeader,
 	DirectoryAdditionalInfo, DirectoryEntry, DirectoryHeader, Efh,
-	PspDirectoryEntry, PspDirectoryEntryAttrs, PspDirectoryEntryType,
+	PspDirectoryEntry, PspDirectoryEntryType,
 	PspDirectoryHeader, EfhRomeSpiMode, EfhNaplesSpiMode, EfhBulldozerSpiMode,
 	ComboDirectoryHeader, ComboDirectoryEntry, ValueOrLocation,
+	WEAK_ADDRESS_MODE,
 };
 use crate::types::Error;
 use crate::types::Result;
@@ -20,6 +21,7 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 use zerocopy::AsBytes;
 use zerocopy::FromBytes;
+use crate::ondisk::DirectoryEntrySerde;
 
 pub struct DirectoryIter<
 	'a,
@@ -38,7 +40,7 @@ pub struct DirectoryIter<
 
 impl<
 		'a,
-		Item: DirectoryEntry + FromBytes + Copy,
+		Item: DirectoryEntrySerde + DirectoryEntry + Copy,
 		T: FlashRead<ERASABLE_BLOCK_SIZE>,
 		const ERASABLE_BLOCK_SIZE: usize,
 	> Iterator for DirectoryIter<'a, Item, T, ERASABLE_BLOCK_SIZE>
@@ -50,10 +52,10 @@ impl<
 				[0xff; ERASABLE_BLOCK_SIZE];
 			let buf = &mut buf[.. size_of::<Item>()];
 			self.storage.read_exact(self.current, buf).ok()?;
-			let result = header_from_collection::<Item>(buf)?; // TODO: Check for errors
+			let result = Item::from_bytes_b(buf)?; // TODO: Check for errors.
 			self.current = self.current.checked_add(size_of::<Item>() as u32)?;
 			self.index += 1;
-			let q = *result;
+			let q = result;
 			Some(q)
 		} else {
 			None
@@ -61,13 +63,11 @@ impl<
 	}
 }
 
-pub trait DirectoryFrontend<Attrs: Sized, const ERASABLE_BLOCK_SIZE: usize> {
+pub trait DirectoryFrontend<Item: Copy, const ERASABLE_BLOCK_SIZE: usize> {
         fn add_blob_entry(
                 &mut self,
                 payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
-                attrs: &Attrs,
-                size: u32,
-		destination_location: Option<u64>,
+                entry: &mut Item,
                 iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>
         ) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>>;
 
@@ -85,17 +85,13 @@ pub trait DirectoryFrontend<Attrs: Sized, const ERASABLE_BLOCK_SIZE: usize> {
 	fn add_from_reader_with_custom_size<Source: std::io::Read>(
 		&mut self,
 		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
-		attrs: &Attrs,
-		size: usize,
+		entry: &mut Item,
 		source: &mut Source,
-		ram_destination_address: Option<u64>,
 	) -> Result<()>
 	{
 		self.add_blob_entry(
 			payload_position,
-			attrs,
-			size.try_into().unwrap(),
-			ram_destination_address,
+			entry,
 			&mut |buf: &mut [u8]| {
 				let mut cursor = 0;
 				loop {
@@ -117,9 +113,8 @@ pub trait DirectoryFrontend<Attrs: Sized, const ERASABLE_BLOCK_SIZE: usize> {
 pub struct Directory<
 	'a,
 	MainHeader,
-	Item: FromBytes,
+	Item: DirectoryEntry,
 	T: FlashRead<ERASABLE_BLOCK_SIZE> + FlashWrite<ERASABLE_BLOCK_SIZE>,
-	Attrs: Sized,
 	const _SPI_BLOCK_SIZE: usize,
 	const ERASABLE_BLOCK_SIZE: usize,
 	const MainHeaderSize: usize,
@@ -134,23 +129,21 @@ pub struct Directory<
 	// Flash. This is used in order to store pointers to other
 	// areas on Flash (with ValueOrLocation::PhysicalAddress).
 	amd_physical_mode_mmio_size: Option<u32>,
-	_attrs: PhantomData<Attrs>,
 	_item: PhantomData<Item>,
 }
 
 impl<
 		'a,
 		MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default,
-		Item: Copy + FromBytes + AsBytes + DirectoryEntry + core::fmt::Debug,
+		Item: Copy + DirectoryEntrySerde + DirectoryEntry + core::fmt::Debug,
 		T: 'a
 			+ FlashRead<ERASABLE_BLOCK_SIZE>
 			+ FlashWrite<ERASABLE_BLOCK_SIZE>,
-		Attrs: Sized,
 		const SPI_BLOCK_SIZE: usize,
 		const ERASABLE_BLOCK_SIZE: usize,
 		const MainHeaderSize: usize,
 	>
-	Directory<'a, MainHeader, Item, T, Attrs, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE, MainHeaderSize>
+	Directory<'a, MainHeader, Item, T, SPI_BLOCK_SIZE, ERASABLE_BLOCK_SIZE, MainHeaderSize>
 {
 	const SPI_BLOCK_SIZE: usize = SPI_BLOCK_SIZE;
 	const MAX_DIRECTORY_HEADERS_SIZE: u32 = SPI_BLOCK_SIZE as u32; // AMD says 0x400; but then good luck with modifying the first entry payload without clobbering the directory that comes right before it.
@@ -223,7 +216,6 @@ impl<
 								Self::MAX_DIRECTORY_HEADERS_SIZE
 							},
 						amd_physical_mode_mmio_size,
-						_attrs: PhantomData,
 						_item: PhantomData,
 					})
 				} else {
@@ -531,19 +523,11 @@ impl<
 			beginning.try_into().map_err(|_| Error::Misaligned)?;
 		self.storage.read_erasable_block(beginning, &mut buf)?;
 		// FIXME: what if this straddles two different blocks?
-		match header_from_collection_mut::<Item>(
-			&mut buf[buf_index .. buf_index + size_of::<Item>()],
-		) {
-			Some(item) => {
-				*item = *entry;
-				self.storage.erase_and_write_blocks(
-					beginning, &buf,
-				)?;
-			}
-			None => {
-				return Err(Error::DirectoryRangeCheck);
-			}
-		}
+		let destination = &mut buf[buf_index .. buf_index + size_of::<Item>()];
+		entry.copy_into_slice(destination);
+		self.storage.erase_and_write_blocks(
+			beginning, &buf,
+		)?;
 		Ok(())
 	}
 	/// PAYLOAD_POSITION: If you have a position on the Flash that you want this fn to use, specify it.  Otherwise, one will be calculated.
@@ -552,7 +536,7 @@ impl<
 	pub(crate) fn add_entry(
 		&mut self,
 		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
-		entry: &Item,
+		entry: &mut Item,
 	) -> Result<Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>> {
 		let total_entries = self
 			.header
@@ -583,7 +567,6 @@ impl<
 					}
 				}
 			};
-			let mut entry = *entry;
 			match result {
 				None => {}
 				Some(beginning) => {
@@ -693,7 +676,6 @@ pub type PspDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	PspDirectoryHeader,
 	PspDirectoryEntry,
 	T,
-	PspDirectoryEntryAttrs,
 	0x3000,
 	ERASABLE_BLOCK_SIZE,
 	{ size_of::<PspDirectoryHeader>() },
@@ -703,7 +685,6 @@ pub type BhdDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	BhdDirectoryHeader,
 	BhdDirectoryEntry,
 	T,
-	BhdDirectoryEntryAttrs,
 	0x1000,
 	ERASABLE_BLOCK_SIZE,
 	{ size_of::<BhdDirectoryHeader>() },
@@ -713,7 +694,6 @@ pub type ComboDirectory<'a, T, const ERASABLE_BLOCK_SIZE: usize> = Directory<
 	ComboDirectoryHeader,
 	ComboDirectoryEntry,
 	T,
-	(),
 	0x1000,
 	ERASABLE_BLOCK_SIZE,
 	{ size_of::<ComboDirectoryHeader>() },
@@ -732,7 +712,6 @@ impl<
 		PspDirectoryHeader,
 		PspDirectoryEntry,
 		T,
-		PspDirectoryEntryAttrs,
 		SPI_BLOCK_SIZE,
 		ERASABLE_BLOCK_SIZE,
 		{ size_of::<PspDirectoryHeader>() },
@@ -758,11 +737,11 @@ impl<
 		}
 		self.add_entry(
 			beginning.into(),
-			&PspDirectoryEntry::new_payload(
-				&PspDirectoryEntryAttrs::new()
-					.with_type_(PspDirectoryEntryType::SecondLevelDirectory),
-				ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end),
-				beginning.into(),
+			&mut PspDirectoryEntry::new_payload(
+				self.directory_address_mode,
+				PspDirectoryEntryType::SecondLevelDirectory,
+				Some(ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end)),
+				Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
 			)?,
 		)?;
 		Self::create(
@@ -775,18 +754,20 @@ impl<
 		)
 	}
 
-	// FIXME: Type-check
+	// TODO: Type-check value
 	pub fn add_value_entry(
 		&mut self,
-		attrs: &PspDirectoryEntryAttrs,
-		value: u64,
-	) -> Result<()> {
-		match self.add_entry(
-			None,
-			&PspDirectoryEntry::new_value(attrs, value),
-		)? {
-			None => Ok(()),
-			_ => Err(Error::EntryTypeMismatch),
+		entry: &mut PspDirectoryEntry,
+	) -> Result<()>
+	{
+		match entry.source(WEAK_ADDRESS_MODE)? {
+			ValueOrLocation::Value(_) => {
+				self.add_entry(None, entry)?;
+				Ok(())
+			}
+			_ => {
+				Err(Error::EntryTypeMismatch)
+			}
 		}
 	}
 }
@@ -799,52 +780,48 @@ impl<
 		const SPI_BLOCK_SIZE: usize,
 		const ERASABLE_BLOCK_SIZE: usize,
 	>
-DirectoryFrontend<PspDirectoryEntryAttrs, ERASABLE_BLOCK_SIZE> for
+DirectoryFrontend<PspDirectoryEntry, ERASABLE_BLOCK_SIZE> for
 	Directory<
 		'a,
 		PspDirectoryHeader,
 		PspDirectoryEntry,
 		T,
-		PspDirectoryEntryAttrs,
 		SPI_BLOCK_SIZE,
 		ERASABLE_BLOCK_SIZE,
 		{ size_of::<PspDirectoryHeader>() },
 	>
 {
+	/// Adds ENTRY to the directory.
+	/// The added entry will have its source fixed up.
 	fn add_blob_entry(
 		&mut self,
 		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
-		attrs: &PspDirectoryEntryAttrs,
-		size: u32,
-		destination_location: Option<u64>,
+		entry: &mut PspDirectoryEntry,
 		iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>,
 	) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
-		if destination_location.is_some() {
-		    return Err(Error::EntryTypeMismatch)
-		}
+		entry.set_source(self.directory_address_mode, ValueOrLocation::EfsRelativeOffset(
+			match payload_position {
+				None => 0,
+				Some(x) => x.into(),
+			}
+		));
+		let size = entry.size().ok_or(Error::EntryTypeMismatch)?;
 		let xpayload_position = self.add_entry(
 			payload_position,
-			&PspDirectoryEntry::new_payload(
-				attrs,
-				size,
-				match payload_position {
-					None => 0,
-					Some(x) => x.into(),
-				},
-			)?,
+			entry,
 		)?;
 		match xpayload_position {
-			None => Err(Error::EntryTypeMismatch),
-			Some(pos) => {
+			   None => Err(Error::EntryTypeMismatch),
+			   Some(pos) => {
 				self.add_payload(
 					pos,
 					size as usize,
 					iterative_contents,
 				)?;
 				Ok(pos)
-			}
-		}
-	}
+                       }
+               }
+       }
 }
 
 impl<
@@ -860,7 +837,6 @@ impl<
 		BhdDirectoryHeader,
 		BhdDirectoryEntry,
 		T,
-		BhdDirectoryEntryAttrs,
 		SPI_BLOCK_SIZE,
 		ERASABLE_BLOCK_SIZE,
 		{ size_of::<BhdDirectoryHeader>() },
@@ -885,12 +861,12 @@ impl<
 		}
 		self.add_entry(
 			beginning.into(),
-			&BhdDirectoryEntry::new_payload(
-				&BhdDirectoryEntryAttrs::new()
-					.with_type_(BhdDirectoryEntryType::SecondLevelDirectory),
-				ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end),
-				beginning.into(),
-				None,
+			&mut BhdDirectoryEntry::new_payload(
+				self.directory_address_mode,
+				BhdDirectoryEntryType::SecondLevelDirectory,
+				Some(ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end)),
+				Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
+				None
 			)?,
 		)?;
 		Self::create(
@@ -902,40 +878,21 @@ impl<
 			self.amd_physical_mode_mmio_size,
 		)
 	}
-	pub(crate) fn add_entry_with_destination(
-		&mut self,
-		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
-		attrs: &BhdDirectoryEntryAttrs,
-		size: u32,
-		destination_location: u64,
-	) -> Result<Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>> {
-		self.add_entry(
-			payload_position,
-			&BhdDirectoryEntry::new_payload(
-				attrs,
-				size,
-				0,
-				Some(destination_location),
-			)?,
-		)
-	}
 
 	pub fn add_apob_entry(
 		&mut self,
-		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
 		type_: BhdDirectoryEntryType,
 		ram_destination_address: u64,
 	) -> Result<()> {
-		let attrs = BhdDirectoryEntryAttrs::new().with_type_(type_);
-		match self.add_entry_with_destination(
-			payload_position,
-			&attrs,
-			0,
-			ram_destination_address,
-		)? {
-			None => Ok(()),
-			_ => Err(Error::EntryTypeMismatch),
-		}
+		let mut entry = BhdDirectoryEntry::new_payload(
+			AddressMode::PhysicalAddress,
+			type_,
+			Some(0),
+			Some(ValueOrLocation::PhysicalAddress(0)),
+			Some(ram_destination_address)
+		)?;
+		self.add_entry(None, &mut entry)?;
+		Ok(())
 	}
 }
 
@@ -947,13 +904,12 @@ impl<
 		const SPI_BLOCK_SIZE: usize,
 		const ERASABLE_BLOCK_SIZE: usize,
 	>
-DirectoryFrontend<BhdDirectoryEntryAttrs, ERASABLE_BLOCK_SIZE> for
+DirectoryFrontend<BhdDirectoryEntry, ERASABLE_BLOCK_SIZE> for
 	Directory<
 		'a,
 		BhdDirectoryHeader,
 		BhdDirectoryEntry,
 		T,
-		BhdDirectoryEntryAttrs,
 		SPI_BLOCK_SIZE,
 		ERASABLE_BLOCK_SIZE,
 		{ size_of::<BhdDirectoryHeader>() },
@@ -962,22 +918,19 @@ DirectoryFrontend<BhdDirectoryEntryAttrs, ERASABLE_BLOCK_SIZE> for
 	fn add_blob_entry(
 		&mut self,
 		payload_position: Option<ErasableLocation<ERASABLE_BLOCK_SIZE>>,
-		attrs: &BhdDirectoryEntryAttrs,
-		size: u32,
-		destination_location: Option<u64>,
+		entry: &mut BhdDirectoryEntry,
 		iterative_contents: &mut dyn FnMut(&mut [u8]) -> Result<usize>,
 	) -> Result<ErasableLocation<ERASABLE_BLOCK_SIZE>> {
+		entry.set_source(self.directory_address_mode, ValueOrLocation::EfsRelativeOffset(
+			match payload_position {
+				None => 0,
+				Some(x) => x.into(),
+			}
+		));
+		let size = entry.size().ok_or(Error::EntryTypeMismatch)?;
 		let xpayload_position = self.add_entry(
 			payload_position,
-			&BhdDirectoryEntry::new_payload(
-				attrs,
-				size,
-				match payload_position {
-					None => 0,
-					Some(x) => x.into(),
-				},
-				destination_location,
-			)?,
+			entry,
 		)?;
 		match xpayload_position {
 			None => Err(Error::EntryTypeMismatch),
