@@ -14,7 +14,7 @@ pub use crate::efs::PspDirectory;
 pub use ondisk::*;
 pub use types::Error;
 pub use types::Result;
-pub use types::ValueOrLocation;
+pub use crate::ondisk::ValueOrLocation;
 pub use crate::efs::DirectoryFrontend;
 pub use crate::efs::preferred_efh_location;
 
