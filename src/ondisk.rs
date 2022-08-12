@@ -916,11 +916,11 @@ pub trait DirectoryEntry {
 	fn set_size(&mut self, value: Option<u32>);
 }
 pub trait DirectoryEntrySerde: Sized {
-	fn from_bytes_b(source: &[u8]) -> Option<Self>;
+	fn from_slice(source: &[u8]) -> Option<Self>;
 	fn copy_into_slice(&self, destination: &mut [u8]);
 }
 impl DirectoryEntrySerde for PspDirectoryEntry {
-	fn from_bytes_b(source: &[u8]) -> Option<Self> {
+	fn from_slice(source: &[u8]) -> Option<Self> {
 		if source.len() != 16 {
 			None
 		} else {
@@ -1175,7 +1175,7 @@ make_bitfield_serde! {
 }
 
 impl DirectoryEntrySerde for BhdDirectoryEntry {
-	fn from_bytes_b(source: &[u8]) -> Option<Self> {
+	fn from_slice(source: &[u8]) -> Option<Self> {
 		if source.len() != 24 {
 			None
 		} else {
@@ -1413,7 +1413,7 @@ pub struct ComboDirectoryEntry {
 }
 
 impl DirectoryEntrySerde for ComboDirectoryEntry {
-	fn from_bytes_b(source: &[u8]) -> Option<Self> {
+	fn from_slice(source: &[u8]) -> Option<Self> {
 		if source.len() != 16 {
 			None
 		} else {

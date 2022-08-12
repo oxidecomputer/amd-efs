@@ -51,7 +51,7 @@ impl<
 				[0xff; ERASABLE_BLOCK_SIZE];
 			let buf = &mut buf[.. size_of::<Item>()];
 			self.storage.read_exact(self.current, buf).ok()?;
-			let result = Item::from_bytes_b(buf)?; // TODO: Check for errors.
+			let result = Item::from_slice(buf)?; // TODO: Check for errors.
 			self.current = self
 				.current
 				.checked_add(size_of::<Item>() as u32)?;
