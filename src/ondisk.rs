@@ -396,6 +396,17 @@ pub(crate) fn mmio_decode(
 }
 
 impl ValueOrLocation {
+	fn effective_address_mode(directory_address_mode: AddressMode, entry_address_mode: AddressMode) -> AddressMode {
+		if directory_address_mode == WEAK_ADDRESS_MODE {
+			entry_address_mode
+		} else {
+			directory_address_mode
+		}
+	}
+	fn is_entry_address_mode_effective(directory_address_mode: AddressMode, entry_address_mode: AddressMode) -> bool {
+		Self::effective_address_mode(directory_address_mode, entry_address_mode) == entry_address_mode
+	}
+
 	pub(crate) fn new_from_raw_location(
 		directory_address_mode: AddressMode,
 		source: u64,
@@ -405,10 +416,10 @@ impl ValueOrLocation {
 			AddressMode::from_u64(entry_address_mode).unwrap();
 		let value = u32::try_from(source & !0xC000_0000_0000_0000)
 			.map_err(|_| Error::DirectoryPayloadRangeCheck)?;
-		let address_mode = match directory_address_mode {
-			WEAK_ADDRESS_MODE => entry_address_mode,
-			x => x,
-		};
+		let address_mode = Self::effective_address_mode(
+			directory_address_mode,
+			entry_address_mode
+		);
 		Ok(match address_mode {
 			AddressMode::PhysicalAddress => {
 				Self::PhysicalAddress(value)
@@ -434,11 +445,10 @@ impl ValueOrLocation {
 				Err(Error::EntryTypeMismatch)
 			}
 			ValueOrLocation::PhysicalAddress(x) => {
-				if directory_address_mode ==
-					AddressMode::PhysicalAddress ||
-					directory_address_mode ==
-						WEAK_ADDRESS_MODE
-				{
+				if Self::is_entry_address_mode_effective(
+					directory_address_mode,
+					AddressMode::PhysicalAddress
+				) {
 					/* AMD retrofitted (introduced) two
 					   flag bits at the top bits in Milan.
 
@@ -461,11 +471,10 @@ impl ValueOrLocation {
 				}
 			}
 			ValueOrLocation::EfsRelativeOffset(x) => {
-				if directory_address_mode ==
-					AddressMode::EfsRelativeOffset ||
-					directory_address_mode ==
-						WEAK_ADDRESS_MODE
-				{
+				if Self::is_entry_address_mode_effective(
+					directory_address_mode,
+					AddressMode::EfsRelativeOffset
+				) {
 					let v = u64::from(*x) |
 						0x4000_0000_0000_0000;
 					Ok(v)
@@ -474,11 +483,10 @@ impl ValueOrLocation {
 				}
 			}
 			ValueOrLocation::DirectoryRelativeOffset(x) => {
-				if directory_address_mode ==
-					AddressMode::DirectoryRelativeOffset ||
-					directory_address_mode ==
-						WEAK_ADDRESS_MODE
-				{
+				if Self::is_entry_address_mode_effective(
+					directory_address_mode,
+					AddressMode::DirectoryRelativeOffset
+				) {
 					let v = u64::from(*x) |
 						0x8000_0000_0000_0000;
 					Ok(v)
@@ -487,11 +495,10 @@ impl ValueOrLocation {
 				}
 			}
 			ValueOrLocation::EntryRelativeOffset(x) => {
-				if directory_address_mode ==
-					AddressMode::EntryRelativeOffset &&
-					directory_address_mode ==
-						WEAK_ADDRESS_MODE
-				{
+				if Self::is_entry_address_mode_effective(
+					directory_address_mode,
+					AddressMode::EntryRelativeOffset
+				) {
 					let v = u64::from(*x) |
 						0xC000_0000_0000_0000;
 					Ok(v)
