@@ -398,29 +398,27 @@ impl<
 			}
 			ValueOrLocation::PhysicalAddress(y) => {
 				// or unknown
-				if let Some(amd_physical_mode_mmio_size) =
-					self.amd_physical_mode_mmio_size
-				{
-					match mmio_decode(
-						y,
-						amd_physical_mode_mmio_size,
-					) {
-						Ok(x) => Ok(x),
-						Err(_) => {
-							// Older Zen models also allowed a flash offset here.
-							// So allow that as well.
-							// TODO: Maybe thread through the processor
-							// generation and only do on Naples and Rome.
-							if y < amd_physical_mode_mmio_size {
+				self.amd_physical_mode_mmio_size.map(|size| {
+					mmio_decode(y, size)
+						.or_else(|_|
+							// Older Zen models
+							// also allowed a
+							// flash offset here.
+							// So allow that as
+							// well.
+							// TODO: Maybe thread
+							// through the
+							// processor
+							// generation and
+							// only do on Naples
+							// and Rome.
+							if y < size {
 								Ok(y)
 							} else {
 								Err(Error::EntryTypeMismatch)
 							}
-						}
-					}
-				} else {
-					Err(Error::EntryTypeMismatch)
-				}
+						)
+				}).ok_or(Error::EntryTypeMismatch)?
 			}
 			ValueOrLocation::EfsRelativeOffset(x) => Ok(x),
 			ValueOrLocation::DirectoryRelativeOffset(y) => Ok(self
