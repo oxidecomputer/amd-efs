@@ -135,7 +135,7 @@ impl Setter<bool> for BLU16 {
 /// the getters return Result--but they have to be able to call map_err
 /// on it in case these DO return Result.
 pub(crate) trait DummyErrorChecks : Sized {
-	fn map_err<F, O>(self, op: O) -> core::result::Result<Self, F>
+	fn map_err<F, O>(self, _op: O) -> core::result::Result<Self, F>
 	where O: Fn(Self) -> F, {
 		Ok(self)
         }

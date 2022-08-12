@@ -15,7 +15,7 @@ use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
 use crate::struct_accessors::DummyErrorChecks;
 use strum_macros::EnumString;
-use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
+use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32};
 //use crate::configs;
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
@@ -41,7 +41,6 @@ pub fn header_from_collection<'a, T: Sized + FromBytes>(
 }
 
 type LU32 = U32<LittleEndian>;
-type LU64 = U64<LittleEndian>;
 
 // The first one is recommended by AMD; the last one is always used in practice.
 pub const EFH_POSITION: [Location; 6] = [
@@ -389,7 +388,7 @@ impl ValueOrLocation {
 	}
 	pub(crate) fn try_into_raw_location(&self, directory_address_mode: AddressMode) -> Result<u64> {
 		match self {
-			ValueOrLocation::Value(x) => {
+			ValueOrLocation::Value(_) => {
 				Err(Error::EntryTypeMismatch)
 			}
 			ValueOrLocation::PhysicalAddress(x) => {
@@ -838,6 +837,7 @@ make_bitfield_serde! {
 	#[bitfield(bits = 128)]
 	pub struct PspDirectoryEntry {
 		#[bits = 8]
+		#[allow(non_snake_case)]
 		pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
 		pub sub_program: B8 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
 		pub rom_id: PspDirectoryRomId : pub get PspDirectoryRomId : pub set PspDirectoryRomId,
@@ -1090,36 +1090,13 @@ impl Default for BhdDirectoryEntryRegionType {
 impl DummyErrorChecks for BhdDirectoryEntryRegionType {
 }
 
-fn read_only_default() -> bool {
-	false // for X86: the only choice
-}
-
-fn reset_image_default() -> bool {
-	false
-}
-
-fn copy_image_default() -> bool {
-	false
-}
-
-fn compressed_default() -> bool {
-	false
-}
-
-fn instance_default() -> u8 {
-	0
-}
-
-fn sub_program_default() -> u8 {
-	0
-}
-
 make_bitfield_serde! {
 	#[bitfield(bits = 192)]
 	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
 	#[repr(C, packed)]
 	pub struct BhdDirectoryEntry {
 		#[bits = 8]
+		#[allow(non_snake_case)]
 		pub type_: BhdDirectoryEntryType : pub get BhdDirectoryEntryType : pub set BhdDirectoryEntryType,
 		#[bits = 8]
 		pub region_type: BhdDirectoryEntryRegionType : pub get BhdDirectoryEntryRegionType : pub set BhdDirectoryEntryRegionType,
@@ -1374,14 +1351,12 @@ pub enum ComboDirectoryEntryFilter {
 	ChipFamilyId(u32), // = 1,
 }
 
-make_bitfield_serde! {
-	#[derive(Clone, Copy)]
-	#[bitfield]
-	pub struct ComboDirectoryEntry {
-		pub(crate) internal_key: B32, // 0-PSP ID; 1-chip family ID
-		pub(crate) internal_value: B32,
-		pub(crate) internal_source: B64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
-	}
+#[derive(Clone, Copy)]
+#[bitfield]
+pub struct ComboDirectoryEntry {
+	pub(crate) internal_key: B32, // 0-PSP ID; 1-chip family ID
+	pub(crate) internal_value: B32,
+	pub(crate) internal_source: B64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
 }
 
 impl DirectoryEntrySerde for ComboDirectoryEntry {
@@ -1434,7 +1409,7 @@ impl DirectoryEntry for ComboDirectoryEntry { // XXX
 	}
 	fn set_source(&mut self, directory_address_mode: AddressMode, value: ValueOrLocation) -> Result<()> {
 		match value {
-			ValueOrLocation::Value(v) => {
+			ValueOrLocation::Value(_) => {
 				Err(Error::EntryTypeMismatch)
 			}
 			x => {

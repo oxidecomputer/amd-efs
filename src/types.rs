@@ -22,10 +22,3 @@ impl From<amd_flash::Error> for Error {
 		Error::Io(error)
 	}
 }
-
-#[derive(Clone, Copy)]
-#[repr(u8)]
-pub enum LocationMode {
-	Offset = 0,
-	Mmio = 1,
-}
