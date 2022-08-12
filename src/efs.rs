@@ -669,10 +669,7 @@ impl<
 		entry.set_source(
 			self.directory_address_mode,
 			ValueOrLocation::EfsRelativeOffset(
-				match payload_position {
-					None => 0,
-					Some(x) => x.into(),
-				},
+				payload_position.map_or(0, |x| x.into())
 			),
 		)?;
 		let size = entry.size().ok_or(Error::EntryTypeMismatch)?;
@@ -1422,9 +1419,7 @@ impl<
 				return Err(Error::Overlap);
 			}
 			let (reference_beginning, reference_end) = (
-				Location::from(
-					bhd_directory.contents_beginning(),
-				),
+				bhd_directory.contents_beginning(),
 				Location::from(bhd_directory.contents_end()),
 			);
 			let intersection_beginning =
