@@ -1176,18 +1176,7 @@ make_bitfield_serde! {
 
 impl DirectoryEntrySerde for BhdDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		if source.len() != 24 {
-			None
-		} else {
-			Some(Self::from_bytes([
-				source[0], source[1], source[2], source[3],
-				source[4], source[5], source[6], source[7],
-				source[8], source[9], source[10], source[11],
-				source[12], source[13], source[14], source[15],
-				source[16], source[17], source[18], source[19],
-				source[20], source[21], source[22], source[23],
-			]))
-		}
+		<[u8; 24]>::try_from(source).ok().map(|s| Self::from_bytes(s))
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
 		destination.copy_from_slice(&self.into_bytes())
@@ -1414,17 +1403,7 @@ pub struct ComboDirectoryEntry {
 
 impl DirectoryEntrySerde for ComboDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		if source.len() != 16 {
-			None
-		} else {
-			let source = [
-				source[0], source[1], source[2], source[3],
-				source[4], source[5], source[6], source[7],
-				source[8], source[9], source[10], source[11],
-				source[12], source[13], source[14], source[15],
-			];
-			Some(Self::from_bytes(source))
-		}
+		<[u8; 16]>::try_from(source).ok().map(|s| Self::from_bytes(s))
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
 		destination.copy_from_slice(&self.into_bytes())
