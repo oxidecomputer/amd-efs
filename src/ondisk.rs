@@ -1,5 +1,6 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
+use core::mem::size_of;
 use crate::struct_accessors::make_accessors;
 use crate::struct_accessors::DummyErrorChecks;
 use crate::struct_accessors::Getter;
@@ -921,7 +922,7 @@ pub trait DirectoryEntrySerde: Sized {
 }
 impl DirectoryEntrySerde for PspDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		<[u8; 16]>::try_from(source).ok().map(|s| Self::from_bytes(s))
+		<[u8; size_of::<Self>()]>::try_from(source).ok().map(|s| Self::from_bytes(s))
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
 		destination.copy_from_slice(&self.into_bytes())
@@ -1166,7 +1167,7 @@ make_bitfield_serde! {
 
 impl DirectoryEntrySerde for BhdDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		<[u8; 24]>::try_from(source).ok().map(|s| Self::from_bytes(s))
+		<[u8; size_of::<Self>()]>::try_from(source).ok().map(|s| Self::from_bytes(s))
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
 		destination.copy_from_slice(&self.into_bytes())
@@ -1393,7 +1394,7 @@ pub struct ComboDirectoryEntry {
 
 impl DirectoryEntrySerde for ComboDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		<[u8; 16]>::try_from(source).ok().map(|s| Self::from_bytes(s))
+		<[u8; size_of::<Self>()]>::try_from(source).ok().map(|s| Self::from_bytes(s))
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
 		destination.copy_from_slice(&self.into_bytes())
