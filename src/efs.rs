@@ -916,16 +916,11 @@ impl<
 			if position != 0xffff_ffff && position != 0
 			/* sigh.  Some images have 0 as "invalid" mark */
 			{
-				return match BhdDirectory::load(
+				return BhdDirectory::load(
 					self.storage,
 					position,
 					self.amd_physical_mode_mmio_size,
-				) {
-					Ok(e) => Some(e),
-					Err(e) => {
-						None // FIXME: error check
-					}
-				};
+				).ok() // FIXME: error check
 			}
 		}
 		None
