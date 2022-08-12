@@ -48,9 +48,21 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 	}
 )}
 
-make_serde!(EfhBulldozerSpiMode, SerdeEfhBulldozerSpiMode, [read_mode, fast_speed_new]);
-make_serde!(EfhNaplesSpiMode, SerdeEfhNaplesSpiMode, [read_mode, fast_speed_new, micron_mode]);
-make_serde!(EfhRomeSpiMode, SerdeEfhRomeSpiMode, [read_mode, fast_speed_new, micron_mode]);
+make_serde!(
+	EfhBulldozerSpiMode,
+	SerdeEfhBulldozerSpiMode,
+	[read_mode, fast_speed_new]
+);
+make_serde!(
+	EfhNaplesSpiMode,
+	SerdeEfhNaplesSpiMode,
+	[read_mode, fast_speed_new, micron_mode]
+);
+make_serde!(
+	EfhRomeSpiMode,
+	SerdeEfhRomeSpiMode,
+	[read_mode, fast_speed_new, micron_mode]
+);
 make_serde!(
 	Efh,
 	SerdeEfh,
@@ -70,17 +82,25 @@ make_serde!(
 	]
 );
 
-make_serde!(DirectoryAdditionalInfo, SerdeDirectoryAdditionalInfo, [base_address, address_mode, max_size]);
-make_serde!(PspSoftFuseChain, SerdePspSoftFuseChain, [
-	secure_debug_unlock,
-	early_secure_debug_unlock,
-	unlock_token_in_nvram,
-	force_security_policy_loading_even_if_insecure,
-	load_diagnostic_bootloader,
-	disable_psp_debug_prints,
-	spi_decoding,
-	postcode_decoding,
-	skip_mp2_firmware_loading,
-	postcode_output_control_1byte,
-	force_recovery_booting
-]);
+make_serde!(
+	DirectoryAdditionalInfo,
+	SerdeDirectoryAdditionalInfo,
+	[base_address, address_mode, max_size]
+);
+make_serde!(
+	PspSoftFuseChain,
+	SerdePspSoftFuseChain,
+	[
+		secure_debug_unlock,
+		early_secure_debug_unlock,
+		unlock_token_in_nvram,
+		force_security_policy_loading_even_if_insecure,
+		load_diagnostic_bootloader,
+		disable_psp_debug_prints,
+		spi_decoding,
+		postcode_decoding,
+		skip_mp2_firmware_loading,
+		postcode_output_control_1byte,
+		force_recovery_booting
+	]
+);

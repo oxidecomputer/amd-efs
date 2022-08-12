@@ -134,21 +134,20 @@ impl Setter<bool> for BLU16 {
 /// The reason this exists is because our macros don't know whether or not
 /// the getters return Result--but they have to be able to call map_err
 /// on it in case these DO return Result.
-pub(crate) trait DummyErrorChecks : Sized {
+pub(crate) trait DummyErrorChecks: Sized {
 	fn map_err<F, O>(self, _op: O) -> core::result::Result<Self, F>
-	where O: Fn(Self) -> F, {
+	where
+		O: Fn(Self) -> F,
+	{
 		Ok(self)
-        }
+	}
 }
 
-impl DummyErrorChecks for u16 {
-}
+impl DummyErrorChecks for u16 {}
 
-impl DummyErrorChecks for u8 {
-}
+impl DummyErrorChecks for u8 {}
 
-impl DummyErrorChecks for bool {
-}
+impl DummyErrorChecks for bool {}
 
 /// This macro expects a struct as a parameter (attributes are fine) and then,
 /// first, defines the exact same struct, and also a more user-friendly struct
