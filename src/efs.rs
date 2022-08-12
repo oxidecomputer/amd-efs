@@ -410,7 +410,7 @@ impl<
 							// Older Zen models also allowed a flash offset here.
 							// So allow that as well.
 							// TODO: Maybe thread through the processor
-							// generation and only do on Naples.
+							// generation and only do on Naples and Rome.
 							if y < amd_physical_mode_mmio_size {
 								Ok(y)
 							} else {
