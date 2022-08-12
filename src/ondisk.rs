@@ -424,6 +424,7 @@ impl ValueOrLocation {
 			}
 		})
 	}
+
 	pub(crate) fn try_into_raw_location(
 		&self,
 		directory_address_mode: AddressMode,
@@ -438,7 +439,22 @@ impl ValueOrLocation {
 					directory_address_mode ==
 						WEAK_ADDRESS_MODE
 				{
-					let v = u64::from(*x) | 0;
+					/* AMD retrofitted (introduced) two
+					   flag bits at the top bits in Milan.
+
+					   In Rome, you actually COULD use
+					   all the bits.
+
+					   Newer platform do not regularily use
+					   AddressMode::PhysicalAddress anyway.
+
+					   But if someone uses
+					   AddressMode::PhysicalAddress,
+					   they might do it on Rome and use
+					   those two top bits as part of the
+					   address.
+					*/
+					let v = u64::from(*x);
 					Ok(v)
 				} else {
 					Err(Error::EntryTypeMismatch)
