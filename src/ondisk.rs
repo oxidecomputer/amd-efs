@@ -592,16 +592,6 @@ impl DirectoryAdditionalInfo {
 		result.set_spi_block_size_checked(value)?;
 		Ok(result)
 	}
-	/*
-		pub fn with_spi_block_size(
-			&mut self,
-			value: u16,
-		) -> Self {
-			let mut result = *self;
-			result.set_spi_block_size_checked(value).unwrap(); // FIXME
-			result
-		}
-	*/
 	pub fn spi_block_size_or_err(
 		&self,
 	) -> core::result::Result<
