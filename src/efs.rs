@@ -999,6 +999,7 @@ impl<
 					match processor_generation {
 						//Some(x) => item.compatible_with_processor_generation(x),
 						None => true,
+						Some(ProcessorGeneration::Naples) => true,
 						_ => false,
 					} {
 					return Ok(ErasableLocation::<
@@ -1092,7 +1093,8 @@ impl<
 			self.efh.psp_directory_table_location_zen()
 				.ok()
 				.unwrap_or(0xffff_ffff);
-		if psp_directory_table_location == 0xffff_ffff {
+		if psp_directory_table_location == 0xffff_ffff
+		|| psp_directory_table_location == 0 {
 			Err(Error::PspDirectoryHeaderNotFound)
 		} else {
 			match PspDirectory::load(
