@@ -1326,7 +1326,7 @@ pub enum ComboDirectoryLookupMode {
 }
 
 make_accessors! {
-	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
 	#[repr(C, packed)]
 	pub struct ComboDirectoryHeader {
 		pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"

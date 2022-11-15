@@ -147,7 +147,7 @@ impl<
 				let cookie = header.cookie();
 				if cookie == *b"$PSP" ||
 					cookie == *b"$PL2" || cookie == *b"$BHD" ||
-					cookie == *b"$BL2"
+					cookie == *b"$BL2" || cookie == *b"2PSP"
 				{
 					let contents_base = DirectoryAdditionalInfo::try_from_unit(
 						header.additional_info().base_address(),
@@ -769,41 +769,6 @@ impl<
 		{ size_of::<PspDirectoryHeader>() },
 	>
 {
-	// Note: Function is crate-private because there's no overlap checking
-	pub(crate) fn create_subdirectory(
-		&mut self,
-		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-		amd_physical_mode_mmio_size: Option<u32>,
-	) -> Result<Self> {
-		// Find existing SecondLevelDirectory, error out if found.
-		let entries = self.entries();
-		for entry in entries {
-			if let Ok(PspDirectoryEntryType::SecondLevelDirectory) =
-				entry.type_or_err()
-			{
-				return Err(Error::Duplicate);
-			}
-		}
-		self.add_entry(
-			beginning.into(),
-			&mut PspDirectoryEntry::new_payload(
-				self.directory_address_mode,
-				PspDirectoryEntryType::SecondLevelDirectory,
-				Some(ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end)),
-				Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
-			)?,
-		)?;
-		Self::create(
-			self.directory_address_mode,
-			self.storage,
-			beginning,
-			end,
-			*b"$PL2",
-			amd_physical_mode_mmio_size,
-		)
-	}
-
 	// TODO: Type-check value
 	pub fn add_value_entry(
 		&mut self,
@@ -836,41 +801,6 @@ impl<
 		{ size_of::<BhdDirectoryHeader>() },
 	>
 {
-	// Note: Function is crate-private because there's no overlap checking
-	pub(crate) fn create_subdirectory(
-		&mut self,
-		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
-	) -> Result<Self> {
-		// Find existing SecondLevelDirectory, error out if found.
-		let entries = self.entries();
-		for entry in entries {
-			if let Ok(BhdDirectoryEntryType::SecondLevelDirectory) =
-				entry.type_or_err()
-			{
-				return Err(Error::Duplicate);
-			}
-		}
-		self.add_entry(
-			beginning.into(),
-			&mut BhdDirectoryEntry::new_payload(
-				self.directory_address_mode,
-				BhdDirectoryEntryType::SecondLevelDirectory,
-				Some(ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end)),
-				Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
-				None
-			)?,
-		)?;
-		Self::create(
-			self.directory_address_mode,
-			self.storage,
-			beginning,
-			end,
-			*b"$BL2",
-			self.amd_physical_mode_mmio_size,
-		)
-	}
-
 	pub fn add_apob_entry(
 		&mut self,
 		type_: BhdDirectoryEntryType,
@@ -1206,31 +1136,6 @@ impl<
 		}
 	}
 
-	pub fn second_level_psp_directory(
-		&self,
-	) -> Result<PspDirectory<T, ERASABLE_BLOCK_SIZE>> {
-		let main_directory = self.psp_directory()?;
-		for entry in main_directory.entries() {
-			match entry.type_or_err() {
-				Ok(PspDirectoryEntryType::SecondLevelDirectory) => {
-					let psp_directory_table_location = main_directory.entry_location(&entry)?;
-					let directory = PspDirectory::load(
-						&self.storage,
-						psp_directory_table_location,
-						self.amd_physical_mode_mmio_size,
-					)?;
-					return Ok(directory);
-				}
-				Ok(_) => {
-				}
-				Err(_) => { // maybe just unknown entry type.
-					// FIXME: check
-				}
-			}
-		}
-		Err(Error::PspDirectoryHeaderNotFound)
-	}
-
 	/// Returns an iterator over level 1 BHD directories.
 	/// If PROCESSOR_GENERATION is Some, then only return the directories
 	/// matching that generation.
@@ -1238,6 +1143,9 @@ impl<
 		&self,
 		processor_generation: Option<ProcessorGeneration>,
 	) -> Result<EfhBhdsIterator<T, ERASABLE_BLOCK_SIZE>> {
+		/// Given V which is possibly a MMIO address (from inside a
+		/// directory entry), convert it to a regular offset
+		/// relative to the beginning of the flash.
 		fn de_mmio(
 			v: u32,
 			amd_physical_mode_mmio_size: Option<u32>,
@@ -1255,10 +1163,10 @@ impl<
 					Err(Error::DirectoryTypeMismatch) => {
 						// Rome is a grey-area that supports both MMIO addresses and offsets
 						if v < amd_physical_mode_mmio_size {
-								v
-							} else {
-								0xffff_ffff
-							}
+							v
+						} else {
+							0xffff_ffff
+						}
 					}
 					Err(_) => 0xffff_ffff,
 				}
@@ -1575,8 +1483,68 @@ impl<
 		Ok(result)
 	}
 
+	pub fn psp_subdirectory(
+		&self,
+		directory: &PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>,
+	) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
+		let entries = directory.entries();
+		let mut found_entry = None;
+		for entry in entries {
+			if let Ok(PspDirectoryEntryType::SecondLevelDirectory) =
+				entry.type_or_err()
+			{
+				found_entry = Some(entry);
+				break
+			}
+		}
+		if let Some(entry) = found_entry {
+			if let Ok(source) = entry.source(AddressMode::DirectoryRelativeOffset) {
+				let location = directory.location_of_source(source, 0/*FIXME*/).unwrap();
+				let directory = PspDirectory::load(&self.storage, location, self.amd_physical_mode_mmio_size).unwrap();
+				Ok(directory)
+			} else {
+				Err(Error::EntryNotFound)
+			}
+		} else {
+			Err(Error::EntryNotFound)
+		}
+	}
+
+	pub fn create_psp_subdirectory(
+		&self,
+		directory: &mut PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>,
+		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
+		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
+		amd_physical_mode_mmio_size: Option<u32>,
+	) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
+		if directory.header.cookie() != *b"$PSP" {
+			return Err(Error::DirectoryTypeMismatch)
+		}
+		if let Err(Error::EntryNotFound) = self.psp_subdirectory(directory) {
+			directory.add_entry(
+				beginning.into(),
+				&mut PspDirectoryEntry::new_payload(
+					directory.directory_address_mode(),
+					PspDirectoryEntryType::SecondLevelDirectory,
+					Some(ErasableLocation::<ERASABLE_BLOCK_SIZE>::extent(beginning, end)),
+					Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
+				)?,
+			)?;
+			PspDirectory::create(
+				directory.directory_address_mode,
+				&self.storage,
+				beginning,
+				end,
+				*b"$PL2",
+				amd_physical_mode_mmio_size,
+			)
+		} else {
+			Err(Error::Duplicate)
+		}
+	}
+
 	pub fn create_second_level_psp_directory(
-		&mut self,
+		&self,
 		beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>,
 		end: ErasableLocation<ERASABLE_BLOCK_SIZE>,
 	) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
@@ -1584,11 +1552,27 @@ impl<
 			Location::from(beginning),
 			Location::from(end),
 		)?;
-		self.psp_directory()?.create_subdirectory(
+		let mut psp_directory = self.psp_directory()?;
+		self.create_psp_subdirectory(
+			&mut psp_directory,
 			beginning,
 			end,
 			self.amd_physical_mode_mmio_size,
 		)
+	}
+
+	pub fn combo_subdirectory(
+		&self,
+		directory: &ComboDirectory<'_, T, ERASABLE_BLOCK_SIZE>,
+		entry: &ComboDirectoryEntry,
+	) -> Result<PspDirectory<'_, T, ERASABLE_BLOCK_SIZE>> {
+		if let Ok(source) = entry.source(AddressMode::DirectoryRelativeOffset) {
+			let location = directory.location_of_source(source, 0/*FIXME*/).unwrap();
+			let directory = PspDirectory::load(&self.storage, location, self.amd_physical_mode_mmio_size).unwrap();
+			Ok(directory)
+		} else {
+			Err(Error::EntryNotFound)
+		}
 	}
 
 	/*pub fn create_second_level_bhd_directory<'c>(&self, bhd_directory: &mut BhdDirectory<'c, T, ERASABLE_BLOCK_SIZE>, beginning: ErasableLocation<ERASABLE_BLOCK_SIZE>, end: ErasableLocation<ERASABLE_BLOCK_SIZE>) -> Result<BhdDirectory<'c, T, ERASABLE_BLOCK_SIZE>> {
