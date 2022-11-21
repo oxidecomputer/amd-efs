@@ -12,6 +12,7 @@ pub enum Error {
 	Duplicate,
 	Misaligned,
 	EntryTypeMismatch,
+	EntryNotFound,
 	DirectoryTypeMismatch,
 }
 
