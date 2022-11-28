@@ -1,6 +1,5 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
-use core::mem::size_of;
 use crate::struct_accessors::make_accessors;
 use crate::struct_accessors::DummyErrorChecks;
 use crate::struct_accessors::Getter;
@@ -16,7 +15,7 @@ use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 use num_traits::FromPrimitive;
 use strum_macros::EnumString;
-use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32};
+use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 //use crate::configs;
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
@@ -42,6 +41,7 @@ pub fn header_from_collection<'a, T: Sized + FromBytes>(
 }
 
 type LU32 = U32<LittleEndian>;
+type LU64 = U64<LittleEndian>;
 
 // The first one is recommended by AMD; the last one is always used in practice.
 pub const EFH_POSITION: [Location; 6] = [
@@ -900,8 +900,9 @@ impl Default for BhdDirectoryRomId {
 
 make_bitfield_serde! {
 	#[derive(Clone, Copy)]
-	#[bitfield(bits = 128)]
-	pub struct PspDirectoryEntry {
+	#[bitfield(bits = 32)]
+	#[repr(u32)]
+	pub struct PspDirectoryEntryAttrs {
 		#[bits = 8]
 		#[allow(non_snake_case)]
 		pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
@@ -909,8 +910,27 @@ make_bitfield_serde! {
 		pub rom_id: PspDirectoryRomId : pub get PspDirectoryRomId : pub set PspDirectoryRomId,
 		#[skip]
 		__: B14,
-		pub(crate) internal_size: B32,
-		pub(crate) internal_source: B64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+	}
+}
+
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+	#[repr(C, packed)]
+	pub struct PspDirectoryEntry {
+		pub(crate) attrs: LU32,
+		pub(crate) internal_size: LU32,
+		pub(crate) internal_source: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+	}
+}
+
+// TODO: Remove.
+impl Default for PspDirectoryEntry {
+	fn default() -> Self {
+		Self {
+			attrs: 0.into(),
+			internal_size: 0.into(),
+			internal_source: 0.into(),
+		}
 	}
 }
 
@@ -934,27 +954,56 @@ pub trait DirectoryEntrySerde: Sized {
 }
 impl DirectoryEntrySerde for PspDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		<[u8; size_of::<Self>()]>::try_from(source).ok().map(|s| Self::from_bytes(s))
+		let result = LayoutVerified::<_, Self>::new_unaligned(source)?;
+		Some(*result.into_ref())
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
-		destination.copy_from_slice(&self.into_bytes())
+		destination.copy_from_slice(&self.as_bytes())
 	}
 }
 
 impl PspDirectoryEntry {
 	const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
 	pub fn type_or_err(&self) -> Result<PspDirectoryEntryType> {
-		self.type__or_err().map_err(|_| Error::EntryTypeMismatch)
+		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.type__or_err().map_err(|_| Error::EntryTypeMismatch)
+	}
+	pub fn new() -> Self {
+		Self::default()
+	}
+	pub fn with_type_(&mut self, value: PspDirectoryEntryType) -> &mut Self {
+		let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_type_(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn type_(&self) -> PspDirectoryEntryType {
+		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.type_()
+	}
+	pub fn with_sub_program(&mut self, value: u8) -> &mut Self {
+		let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_sub_program(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_rom_id(&mut self, value: PspDirectoryRomId) -> &mut Self {
+		let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_rom_id(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
 	}
 	/// Note: Caller can modify other attributes using the with_ accessors.
 	pub fn new_value(
 		type_: PspDirectoryEntryType,
 		value: u64,
 	) -> Result<Self> {
-		Ok(Self::new()
+		let mut result = Self::new()
 			.with_type_(type_.into())
-			.with_internal_size(Self::SIZE_VALUE_MARKER.into())
-			.with_internal_source(value.into()))
+			.build();
+		result.internal_size = Self::SIZE_VALUE_MARKER.into();
+		result.internal_source = value.into();
+		Ok(result)
 	}
 	/// Note: Caller can modify other attributes using the with_ accessors.
 	pub fn new_payload(
@@ -963,7 +1012,7 @@ impl PspDirectoryEntry {
 		size: Option<u32>,
 		source: Option<ValueOrLocation>,
 	) -> Result<Self> {
-		let mut result = Self::new().with_type_(type_.into());
+		let mut result = Self::new().with_type_(type_.into()).build();
 		result.set_size(size);
 		if let Some(x) = source {
 			result.set_source(directory_address_mode, x)?;
@@ -977,8 +1026,8 @@ impl DirectoryEntry for PspDirectoryEntry {
 		&self,
 		directory_address_mode: AddressMode,
 	) -> Result<ValueOrLocation> {
-		let source = self.internal_source();
-		let size = self.internal_size();
+		let source = self.internal_source.get();
+		let size = self.internal_size.get();
 		if size == Self::SIZE_VALUE_MARKER {
 			Ok(ValueOrLocation::Value(source))
 		} else {
@@ -995,21 +1044,21 @@ impl DirectoryEntry for PspDirectoryEntry {
 	) -> Result<()> {
 		match value {
 			ValueOrLocation::Value(v) => {
-				self.set_internal_size(Self::SIZE_VALUE_MARKER);
-				self.set_internal_source(v);
+				self.internal_size.set(Self::SIZE_VALUE_MARKER);
+				self.internal_source.set(v);
 				Ok(())
 			}
 			x => {
 				let v = x.try_into_raw_location(
 					directory_address_mode,
 				)?;
-				self.set_internal_source(v);
+				self.internal_source.set(v);
 				Ok(())
 			}
 		}
 	}
 	fn size(&self) -> Option<u32> {
-		let size = self.internal_size();
+		let size = self.internal_size.get();
 		if size == Self::SIZE_VALUE_MARKER {
 			None
 		} else {
@@ -1017,7 +1066,7 @@ impl DirectoryEntry for PspDirectoryEntry {
 		}
 	}
 	fn set_size(&mut self, value: Option<u32>) {
-		self.set_internal_size(match value {
+		self.internal_size.set(match value {
 			None => Self::SIZE_VALUE_MARKER,
 			Some(x) => {
 				assert!(x != Self::SIZE_VALUE_MARKER);
@@ -1032,10 +1081,11 @@ impl core::fmt::Debug for PspDirectoryEntry {
 		// DirectoryRelativeOffset (WEAK_ADDRESS_MODE) is the only one that's always overridable.
 		let source = self.source(WEAK_ADDRESS_MODE);
 		let size = self.size();
+		let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
 		fmt.debug_struct("PspDirectoryEntry")
-			.field("type_", &self.type__or_err())
-			.field("sub_program", &self.sub_program_or_err())
-			.field("rom_id", &self.rom_id_or_err())
+			.field("type_", &attrs.type__or_err())
+			.field("sub_program", &attrs.sub_program_or_err())
+			.field("rom_id", &attrs.rom_id_or_err())
 			.field("size", &size)
 			.field("source", &source)
 			.finish()
@@ -1152,10 +1202,10 @@ impl Default for BhdDirectoryEntryRegionType {
 impl DummyErrorChecks for BhdDirectoryEntryRegionType {}
 
 make_bitfield_serde! {
-	#[bitfield(bits = 192)]
-	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
-	#[repr(C, packed)]
-	pub struct BhdDirectoryEntry {
+	#[bitfield(bits = 32)]
+	#[derive(Clone, Copy)]
+	#[repr(u32)]
+	pub struct BhdDirectoryEntryAttrs {
 		#[bits = 8]
 		#[allow(non_snake_case)]
 		pub type_: BhdDirectoryEntryType : pub get BhdDirectoryEntryType : pub set BhdDirectoryEntryType,
@@ -1170,19 +1220,26 @@ make_bitfield_serde! {
 		pub rom_id: BhdDirectoryRomId : pub get BhdDirectoryRomId : pub set BhdDirectoryRomId,
 		#[skip]
 		__: B3,
-
-		pub(crate) internal_size: B32,   // 0xFFFF_FFFF for value entry
-		pub(crate) internal_source: B64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
-		pub(crate) internal_destination_location: B64, // 0xffff_ffff_ffff_ffff: none
+	}
+}
+make_accessors! {
+	#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+	#[repr(C, packed)]
+	pub struct BhdDirectoryEntry {
+		attrs: LU32,
+		pub(crate) internal_size: LU32,   // 0xFFFF_FFFF for value entry
+		pub(crate) internal_source: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+		pub(crate) internal_destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
 	}
 }
 
 impl DirectoryEntrySerde for BhdDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		<[u8; size_of::<Self>()]>::try_from(source).ok().map(|s| Self::from_bytes(s))
+		let result = LayoutVerified::<_, Self>::new_unaligned(source)?;
+		Some(*result.into_ref())
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
-		destination.copy_from_slice(&self.into_bytes())
+		destination.copy_from_slice(&self.as_bytes())
 	}
 }
 
@@ -1190,16 +1247,78 @@ impl BhdDirectoryEntry {
 	const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
 	const DESTINATION_NONE_MARKER: u64 = 0xffff_ffff_ffff_ffff;
 	pub fn type_or_err(&self) -> Result<BhdDirectoryEntryType> {
-		self.type__or_err().map_err(|_| Error::EntryTypeMismatch)
+		let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.type__or_err().map_err(|_| Error::EntryTypeMismatch)
 	}
 
 	pub fn destination_location(&self) -> Option<u64> {
-		let destination_location = self.internal_destination_location();
+		let destination_location = self.internal_destination_location.get();
 		if destination_location == Self::DESTINATION_NONE_MARKER {
 			None
 		} else {
 			Some(destination_location)
 		}
+	}
+	pub fn with_type_(&mut self, value: BhdDirectoryEntryType) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_type_(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_region_type(&mut self, value: BhdDirectoryEntryRegionType) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_region_type(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_reset_image(&mut self, value: bool) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_reset_image(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_copy_image(&mut self, value: bool) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_copy_image(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_read_only(&mut self, value: bool) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_read_only(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_compressed(&mut self, value: bool) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_compressed(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_instance(&mut self, value: u8) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_instance(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_sub_program(&mut self, value: u8) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_sub_program(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub fn with_rom_id(&mut self, value: BhdDirectoryRomId) -> &mut Self {
+		let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+		attrs.set_rom_id(value);
+		self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+		self
+	}
+	pub(crate) fn with_internal_destination_location(&mut self, value: u64) -> &mut Self {
+		self.internal_destination_location.set(value);
+		self
+	}
+	pub fn new() -> Self {
+		Self::default()
 	}
 	/// Note: Caller can modify other attributes afterwards (especially source--which he should modify).
 	pub fn new_payload(
@@ -1222,7 +1341,8 @@ impl BhdDirectoryEntry {
 					}
 				}
 				.into(),
-			);
+			)
+			.build();
 		result.set_size(size);
 		if let Some(x) = source {
 			result.set_source(directory_address_mode, x)?;
@@ -1233,17 +1353,29 @@ impl BhdDirectoryEntry {
 	}
 }
 
+// TODO: Remove.
+impl Default for BhdDirectoryEntry {
+	fn default() -> Self {
+		Self {
+			attrs: 0.into(),
+			internal_size: 0.into(),
+			internal_source: 0.into(),
+			internal_destination_location: Self::DESTINATION_NONE_MARKER.into(),
+		}
+	}
+}
+
 impl DirectoryEntry for BhdDirectoryEntry {
 	fn source(
 		&self,
 		directory_address_mode: AddressMode,
 	) -> Result<ValueOrLocation> {
-		let size = self.internal_size();
-		let source = self.internal_source();
+		let size = self.internal_size.get();
+		let source = self.internal_source.get();
 		if size == Self::SIZE_VALUE_MARKER {
 			Ok(ValueOrLocation::Value(source))
 		} else {
-			let source = self.internal_source();
+			let source = self.internal_source.get();
 			ValueOrLocation::new_from_raw_location(
 				directory_address_mode,
 				source,
@@ -1257,10 +1389,10 @@ impl DirectoryEntry for BhdDirectoryEntry {
 	) -> Result<()> {
 		match value {
 			ValueOrLocation::Value(v) => {
-				if self.internal_size() ==
+				if self.internal_size.get() ==
 					Self::SIZE_VALUE_MARKER
 				{
-					self.set_internal_source(v);
+					self.internal_source.set(v);
 					Ok(())
 				} else {
 					Err(Error::EntryTypeMismatch)
@@ -1270,13 +1402,13 @@ impl DirectoryEntry for BhdDirectoryEntry {
 				let v = x.try_into_raw_location(
 					directory_address_mode,
 				)?;
-				self.set_internal_source(v);
+				self.internal_source.set(v);
 				Ok(())
 			}
 		}
 	}
 	fn size(&self) -> Option<u32> {
-		let size = self.internal_size();
+		let size = self.internal_size.get();
 		if size == Self::SIZE_VALUE_MARKER {
 			None
 		} else {
@@ -1284,7 +1416,7 @@ impl DirectoryEntry for BhdDirectoryEntry {
 		}
 	}
 	fn set_size(&mut self, value: Option<u32>) {
-		self.set_internal_size(match value {
+		self.internal_size.set(match value {
 			None => Self::SIZE_VALUE_MARKER,
 			Some(x) => {
 				assert!(x != Self::SIZE_VALUE_MARKER);
@@ -1300,14 +1432,15 @@ impl core::fmt::Debug for BhdDirectoryEntry {
 		let source = self.source(WEAK_ADDRESS_MODE);
 		let destination_location = self.destination_location();
 		let size = self.size();
+		let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
 		fmt.debug_struct("BhdDirectoryEntry")
-			.field("type_", &self.type__or_err())
-			.field("region_type", &self.region_type_or_err())
-			.field("reset_image", &self.reset_image_or_err())
-			.field("copy_image", &self.copy_image_or_err())
-			.field("read_only", &self.read_only_or_err())
-			.field("compressed", &self.compressed_or_err())
-			.field("instance", &self.instance_or_err())
+			.field("type_", &attrs.type__or_err())
+			.field("region_type", &attrs.region_type_or_err())
+			.field("reset_image", &attrs.reset_image_or_err())
+			.field("copy_image", &attrs.copy_image_or_err())
+			.field("read_only", &attrs.read_only_or_err())
+			.field("compressed", &attrs.compressed_or_err())
+			.field("instance", &attrs.instance_or_err())
 			.field("size", &size)
 			.field("source", &source)
 			.field("destination_location", &destination_location)
@@ -1359,7 +1492,7 @@ impl DirectoryHeader for ComboDirectoryHeader {
 	fn additional_info(&self) -> DirectoryAdditionalInfo {
 		DirectoryAdditionalInfo::from(0)
 	}
-	fn set_additional_info(&mut self, value: DirectoryAdditionalInfo) {}
+	fn set_additional_info(&mut self, _value: DirectoryAdditionalInfo) {}
 	fn total_entries(&self) -> u32 {
 		self.total_entries.get()
 	}
@@ -1396,32 +1529,46 @@ pub enum ComboDirectoryEntryFilter {
 	ChipFamilyId(u32), // = 1,
 }
 
-#[derive(Clone, Copy)]
-#[bitfield]
+#[derive(Clone, Copy, FromBytes, AsBytes, Unaligned)]
+#[repr(C, packed)]
 pub struct ComboDirectoryEntry {
-	pub(crate) internal_key: B32, // 0-PSP ID; 1-chip family ID
-	pub(crate) internal_value: B32,
-	pub(crate) internal_source: B64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
+	pub(crate) internal_key: LU32, // 0-PSP ID; 1-chip family ID
+	pub(crate) internal_value: LU32,
+	pub(crate) internal_source: LU64, // that's the (Psp|Bhd) directory entry location. Note: If 32 bit high nibble is set, then that's a physical address
 }
 
 impl DirectoryEntrySerde for ComboDirectoryEntry {
 	fn from_slice(source: &[u8]) -> Option<Self> {
-		<[u8; size_of::<Self>()]>::try_from(source).ok().map(|s| Self::from_bytes(s))
+		let result = LayoutVerified::<_, Self>::new_unaligned(source)?;
+		Some(*result.into_ref())
 	}
 	fn copy_into_slice(&self, destination: &mut [u8]) {
-		destination.copy_from_slice(&self.into_bytes())
+		destination.copy_from_slice(&self.as_bytes())
 	}
 }
 
 impl core::fmt::Debug for ComboDirectoryEntry {
 	fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		// DirectoryRelativeOffset (WEAK_ADDRESS_MODE) is the only one that's always overridable.
+		let internal_key = self.internal_key;
+		let internal_value = self.internal_value;
 		let source = self.source(WEAK_ADDRESS_MODE);
 		fmt.debug_struct("ComboDirectoryEntry")
-			.field("key", &self.internal_key())
-			.field("value", &self.internal_value())
+			.field("key", &internal_key)
+			.field("value", &internal_value)
 			.field("source", &source)
 			.finish()
+	}
+}
+
+// TODO: Remove.
+impl Default for ComboDirectoryEntry {
+	fn default() -> Self {
+		Self {
+			internal_key: 0.into(),
+			internal_value: 0.into(),
+			internal_source: 0.into(),
+		}
 	}
 }
 
@@ -1431,7 +1578,7 @@ impl DirectoryEntry for ComboDirectoryEntry {
 		&self,
 		directory_address_mode: AddressMode,
 	) -> Result<ValueOrLocation> {
-		let source = self.internal_source();
+		let source = self.internal_source.get();
 		ValueOrLocation::new_from_raw_location(
 			directory_address_mode,
 			source,
@@ -1450,7 +1597,7 @@ impl DirectoryEntry for ComboDirectoryEntry {
 				let v = x.try_into_raw_location(
 					directory_address_mode,
 				)?;
-				self.set_internal_source(v.into());
+				self.internal_source = v.into();
 				Ok(())
 			}
 		}
@@ -1465,8 +1612,8 @@ impl DirectoryEntry for ComboDirectoryEntry {
 
 impl ComboDirectoryEntry {
 	pub fn filter(&self) -> Result<ComboDirectoryEntryFilter> {
-		let key = self.internal_key();
-		let value = self.internal_value();
+		let key = self.internal_key.get();
+		let value = self.internal_value.get();
 		match key {
 			0 => Ok(ComboDirectoryEntryFilter::PspId(value)),
 			1 => Ok(ComboDirectoryEntryFilter::ChipFamilyId(value)),
@@ -1476,14 +1623,17 @@ impl ComboDirectoryEntry {
 	pub fn set_filter(&mut self, value: ComboDirectoryEntryFilter) {
 		match value {
 			ComboDirectoryEntryFilter::PspId(value) => {
-				self.set_internal_key(0);
-				self.set_internal_value(value)
+				self.internal_key.set(0);
+				self.internal_value.set(value.into());
 			}
 			ComboDirectoryEntryFilter::ChipFamilyId(value) => {
-				self.set_internal_key(0);
-				self.set_internal_value(value)
+				self.internal_key.set(0);
+				self.internal_value.set(value.into());
 			}
 		}
+	}
+	pub fn new() -> Self {
+		Self::default()
 	}
 }
 
