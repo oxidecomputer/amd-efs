@@ -12,7 +12,7 @@ to the `[dependencies]` block in your `Cargo.toml`.
 
 To iterate, you can do:
 
-    let efs = match Efs::<_, 0x1000, 0x2_0000>::load(storage) {
+    let efs = match Efs::<_>::load(storage) {
         Ok(efs) => {
             efs
         },
