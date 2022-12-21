@@ -11,123 +11,123 @@ use zerocopy::{AsBytes, FromBytes, U16, U32, U64};
 //}
 
 pub(crate) trait Getter<T> {
-	fn get1(self) -> T;
+    fn get1(self) -> T;
 }
 impl Getter<u64> for U64<LittleEndian> {
-	fn get1(self) -> u64 {
-		self.get()
-	}
+    fn get1(self) -> u64 {
+        self.get()
+    }
 }
 impl Getter<u32> for U32<LittleEndian> {
-	fn get1(self) -> u32 {
-		self.get()
-	}
+    fn get1(self) -> u32 {
+        self.get()
+    }
 }
 impl Getter<u16> for U16<LittleEndian> {
-	fn get1(self) -> u16 {
-		self.get()
-	}
+    fn get1(self) -> u16 {
+        self.get()
+    }
 }
 impl Getter<u8> for u8 {
-	fn get1(self) -> u8 {
-		self
-	}
+    fn get1(self) -> u8 {
+        self
+    }
 }
 impl<'a> Getter<&'a [u8]> for &'a [u8] {
-	fn get1(self) -> &'a [u8] {
-		self
-	}
+    fn get1(self) -> &'a [u8] {
+        self
+    }
 }
 impl<T: FromPrimitive> Getter<Result<T>> for u8 {
-	fn get1(self) -> Result<T> {
-		T::from_u8(self).ok_or(Error::EntryTypeMismatch)
-	}
+    fn get1(self) -> Result<T> {
+        T::from_u8(self).ok_or(Error::EntryTypeMismatch)
+    }
 }
 impl<T: FromPrimitive> Getter<Result<T>> for U32<LittleEndian> {
-	fn get1(self) -> Result<T> {
-		T::from_u32(self.get()).ok_or(Error::EntryTypeMismatch)
-	}
+    fn get1(self) -> Result<T> {
+        T::from_u32(self.get()).ok_or(Error::EntryTypeMismatch)
+    }
 }
 // For Token
 impl<T: FromPrimitive> Getter<Result<T>> for u32 {
-	fn get1(self) -> Result<T> {
-		T::from_u32(self).ok_or(Error::EntryTypeMismatch)
-	}
+    fn get1(self) -> Result<T> {
+        T::from_u32(self).ok_or(Error::EntryTypeMismatch)
+    }
 }
 #[derive(Debug, PartialEq, FromBytes, AsBytes, Clone, Copy)]
 #[repr(C, packed)]
 pub(crate) struct BU8(pub(crate) u8);
 impl Getter<Result<bool>> for BU8 {
-	fn get1(self) -> Result<bool> {
-		match self.0 {
-			0 => Ok(false),
-			1 => Ok(true),
-			_ => Err(Error::EntryTypeMismatch),
-		}
-	}
+    fn get1(self) -> Result<bool> {
+        match self.0 {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(Error::EntryTypeMismatch),
+        }
+    }
 }
 
 impl From<bool> for BU8 {
-	fn from(value: bool) -> Self {
-		match value {
-			true => Self(1),
-			false => Self(0),
-		}
-	}
+    fn from(value: bool) -> Self {
+        match value {
+            true => Self(1),
+            false => Self(0),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, FromBytes, AsBytes, Clone, Copy)]
 #[repr(C, packed)]
 pub(crate) struct BLU16(pub(crate) U16<LittleEndian>);
 impl Getter<Result<bool>> for BLU16 {
-	fn get1(self) -> Result<bool> {
-		match self.0.get() {
-			0 => Ok(false),
-			1 => Ok(true),
-			_ => Err(Error::EntryTypeMismatch),
-		}
-	}
+    fn get1(self) -> Result<bool> {
+        match self.0.get() {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(Error::EntryTypeMismatch),
+        }
+    }
 }
 
 pub(crate) trait Setter<T> {
-	fn set1(&mut self, value: T);
+    fn set1(&mut self, value: T);
 }
 impl<T: ToPrimitive> Setter<T> for U64<LittleEndian> {
-	fn set1(&mut self, value: T) {
-		self.set(value.to_u64().unwrap())
-	}
+    fn set1(&mut self, value: T) {
+        self.set(value.to_u64().unwrap())
+    }
 }
 impl<T: ToPrimitive> Setter<T> for U32<LittleEndian> {
-	fn set1(&mut self, value: T) {
-		self.set(value.to_u32().unwrap())
-	}
+    fn set1(&mut self, value: T) {
+        self.set(value.to_u32().unwrap())
+    }
 }
 impl<T: ToPrimitive> Setter<T> for U16<LittleEndian> {
-	// maybe never happens
-	fn set1(&mut self, value: T) {
-		self.set(value.to_u16().unwrap())
-	}
+    // maybe never happens
+    fn set1(&mut self, value: T) {
+        self.set(value.to_u16().unwrap())
+    }
 }
 impl<T: ToPrimitive> Setter<T> for u8 {
-	fn set1(&mut self, value: T) {
-		*self = value.to_u8().unwrap()
-	}
+    fn set1(&mut self, value: T) {
+        *self = value.to_u8().unwrap()
+    }
 }
 impl Setter<bool> for BU8 {
-	fn set1(&mut self, value: bool) {
-		*self = BU8(match value {
-			false => 0,
-			true => 1,
-		})
-	}
+    fn set1(&mut self, value: bool) {
+        *self = BU8(match value {
+            false => 0,
+            true => 1,
+        })
+    }
 }
 impl Setter<bool> for BLU16 {
-	fn set1(&mut self, value: bool) {
-		*self = Self(match value {
-			false => 0.into(),
-			true => 1.into(),
-		})
-	}
+    fn set1(&mut self, value: bool) {
+        *self = Self(match value {
+            false => 0.into(),
+            true => 1.into(),
+        })
+    }
 }
 
 /// Since primitive types are not a Result, this just wraps them into a Result.
@@ -135,12 +135,12 @@ impl Setter<bool> for BLU16 {
 /// the getters return Result--but they have to be able to call map_err
 /// on it in case these DO return Result.
 pub(crate) trait DummyErrorChecks: Sized {
-	fn map_err<F, O>(self, _op: O) -> core::result::Result<Self, F>
-	where
-		O: Fn(Self) -> F,
-	{
-		Ok(self)
-	}
+    fn map_err<F, O>(self, _op: O) -> core::result::Result<Self, F>
+    where
+        O: Fn(Self) -> F,
+    {
+        Ok(self)
+    }
 }
 
 impl DummyErrorChecks for u16 {}
