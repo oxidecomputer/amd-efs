@@ -11,41 +11,43 @@ use crate::struct_accessors::DummyErrorChecks;
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
 macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
 ) => (
-	paste::paste!{
-		impl<'de> serde::de::Deserialize<'de> for $StructName {
-			fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-			where D: serde::de::Deserializer<'de>, {
-				let config = $SerdeStructName::deserialize(deserializer)?;
-				Ok($StructName::builder()
-				$(
-				.[<with_ $field_name>](config.$field_name.into())
-				)*
-				.build())
-		        }
-		}
-		impl serde::Serialize for $StructName {
-			fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-			where S: serde::Serializer, {
-				$SerdeStructName {
-					$(
-						$field_name: self.$field_name().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
-					)*
-				}.serialize(serializer)
-			}
-		}
-		#[cfg(feature = "schemars")]
-		impl schemars::JsonSchema for $StructName {
-			fn schema_name() -> String {
-				$SerdeStructName::schema_name()
-			}
-			fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-				$SerdeStructName::json_schema(gen)
-			}
-			fn is_referenceable() -> bool {
-				$SerdeStructName::is_referenceable()
-			}
-		}
-	}
+    paste::paste!{
+        impl<'de> serde::de::Deserialize<'de> for $StructName {
+            fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+                where D: serde::de::Deserializer<'de>,
+            {
+                let config = $SerdeStructName::deserialize(deserializer)?;
+                Ok($StructName::builder()
+                    $(
+                        .[<with_ $field_name>](config.$field_name.into())
+                    )*
+                    .build())
+                }
+            }
+            impl serde::Serialize for $StructName {
+                fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+                    where S: serde::Serializer,
+                {
+                    $SerdeStructName {
+                        $(
+                            $field_name: self.$field_name().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
+                        )*
+                }.serialize(serializer)
+            }
+        }
+        #[cfg(feature = "schemars")]
+        impl schemars::JsonSchema for $StructName {
+            fn schema_name() -> String {
+                $SerdeStructName::schema_name()
+            }
+            fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+                $SerdeStructName::json_schema(gen)
+            }
+            fn is_referenceable() -> bool {
+                $SerdeStructName::is_referenceable()
+            }
+        }
+    }
 )}
 
 make_serde!(
