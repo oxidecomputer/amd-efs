@@ -970,11 +970,19 @@ impl PspDirectoryEntry {
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
     }
+    pub fn sub_program(&self) -> u8 {
+        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.sub_program()
+    }
     pub fn with_rom_id(&mut self, value: PspDirectoryRomId) -> &mut Self {
         let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_rom_id(value);
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
+    }
+    pub fn rom_id(&self) -> PspDirectoryRomId {
+        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.rom_id()
     }
     /// Note: Caller can modify other attributes using the with_ accessors.
     pub fn new_value(type_: PspDirectoryEntryType, value: u64) -> Result<Self> {
@@ -1255,11 +1263,19 @@ impl BhdDirectoryEntry {
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
     }
+    pub fn set_reset_image(&mut self, value: bool) {
+        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.set_reset_image(value);
+    }
     pub fn with_copy_image(&mut self, value: bool) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_copy_image(value);
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
+    }
+    pub fn set_copy_image(&mut self, value: bool) {
+        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.set_copy_image(value);
     }
     pub fn with_read_only(&mut self, value: bool) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
@@ -1267,11 +1283,19 @@ impl BhdDirectoryEntry {
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
     }
+    pub fn set_read_only(&mut self, value: bool) {
+        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.set_read_only(value);
+    }
     pub fn with_compressed(&mut self, value: bool) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_compressed(value);
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
+    }
+    pub fn set_compressed(&mut self, value: bool) {
+        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.set_compressed(value);
     }
     pub fn with_instance(&mut self, value: u8) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
@@ -1279,17 +1303,29 @@ impl BhdDirectoryEntry {
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
     }
+    pub fn instance(&self) -> u8 {
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.instance()
+    }
     pub fn with_sub_program(&mut self, value: u8) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_sub_program(value);
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
     }
+    pub fn sub_program(&self) -> u8 {
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.sub_program()
+    }
     pub fn with_rom_id(&mut self, value: BhdDirectoryRomId) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_rom_id(value);
         self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
         self
+    }
+    pub fn rom_id(&self) -> BhdDirectoryRomId {
+        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
+        attrs.rom_id()
     }
     pub(crate) fn with_internal_destination_location(
         &mut self,
