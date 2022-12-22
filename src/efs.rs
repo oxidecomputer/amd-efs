@@ -29,6 +29,7 @@ pub struct Directory<
     const MAIN_HEADER_SIZE: usize,
     const ITEM_SIZE: usize,
 > {
+    beginning: Location, // mostly to help following outward pointers
     directory_address_mode: AddressMode,
     header: MainHeader,
     directory_headers_size: u32,
@@ -76,12 +77,12 @@ impl<
     /// Note: Caller has to check whether it is the right cookie (possibly afterwards)!
     pub fn load<'a, T: FlashRead>(
         storage: &'a T,
-        location: Location,
+        beginning: Location,
         amd_physical_mode_mmio_size: Option<u32>,
     ) -> Result<Self> {
         let mut buf: [u8; MAIN_HEADER_SIZE] = [0xff; MAIN_HEADER_SIZE];
         assert_eq!(MAIN_HEADER_SIZE, size_of::<MainHeader>()); // TODO: move to compile-time
-        storage.read_exact(location, &mut buf)?;
+        storage.read_exact(beginning, &mut buf)?;
         match header_from_collection::<MainHeader>(&buf[..]) {
             Some(header) => {
                 let cookie = header.cookie();
@@ -100,14 +101,20 @@ impl<
                         _ => return Err(Error::DirectoryTypeMismatch),
                     }
                     let mut entries = [Item::default(); 64];
+                    let mut cursor = beginning
+                        .checked_add(MAIN_HEADER_SIZE as u32)
+                        .ok_or(Error::DirectoryRangeCheck)?;
                     for i in 0..(header.total_entries() as usize) {
                         if i < 64 {
                             let mut buf: [u8; ITEM_SIZE] = [0xff; ITEM_SIZE];
                             assert_eq!(ITEM_SIZE, size_of::<Item>()); // TODO: move to compile-time
                             storage.read_exact(
-                                location + (i as u32) * (ITEM_SIZE as u32),
+                                cursor,
                                 &mut buf,
                             )?;
+                            cursor = cursor
+                                .checked_add(ITEM_SIZE as u32)
+                                .ok_or(Error::DirectoryRangeCheck)?;
                             match header_from_collection::<Item>(&buf[..]) {
                                 Some(entry) => {
                                     entries[i] = *entry;
@@ -119,6 +126,7 @@ impl<
                         }
                     }
                     Ok(Self {
+                        beginning,
                         directory_address_mode,
                         header: *header,
                         directory_headers_size: Self::minimal_directory_size(
@@ -135,13 +143,17 @@ impl<
         }
     }
     fn create(
+        beginning: Location,
         directory_address_mode: AddressMode,
         cookie: [u8; 4],
         amd_physical_mode_mmio_size: Option<u32>,
         payloads_beginning: Option<ErasableLocation>,
         entries: &[Item],
     ) -> Result<Self> {
-        // FIXME: handle directory_address_mode
+        // This DIRECTORY mode is currently unsupported by PSP ABL.
+        if directory_address_mode == AddressMode::EntryRelativeOffset {
+            return Err(Error::DirectoryTypeMismatch)
+        }
         let mut header = MainHeader::default();
         header.set_cookie(cookie);
         let payloads_beginning = match payloads_beginning {
@@ -151,6 +163,7 @@ impl<
             }
         };
         let mut result = Self {
+            beginning,
             directory_address_mode,
             header,
             directory_headers_size: Self::minimal_directory_size(
@@ -254,6 +267,59 @@ impl<
                 None
             }
         })
+    }
+    pub fn location_of_source(
+        &self,
+        source: ValueOrLocation,
+        entry_base_location: Location,
+    ) -> Result<Location> {
+        match source {
+                ValueOrLocation::Value(_) => {
+                        Err(Error::DirectoryTypeMismatch)
+                }
+                ValueOrLocation::PhysicalAddress(y) => {
+                        // or unknown
+                        self.amd_physical_mode_mmio_size.map(|size| {
+                                mmio_decode(y, size)
+                                        .or_else(|_|
+                                                // Older Zen models
+                                                // also allowed a
+                                                // flash offset here.
+                                                // So allow that as
+                                                // well.
+                                                // TODO: Maybe thread
+                                                // through the
+                                                // processor
+                                                // generation and
+                                                // only do on Naples
+                                                // and Rome.
+                                                if y < size {
+                                                        Ok(y)
+                                                } else {
+                                                        Err(Error::EntryTypeMismatch)
+                                                }
+                                        )
+                        }).ok_or(Error::EntryTypeMismatch)?
+                }
+                ValueOrLocation::EfsRelativeOffset(x) => Ok(x),
+                ValueOrLocation::DirectoryRelativeOffset(y) => Ok(self
+                        .beginning
+                        .checked_add(y)
+                        .ok_or(Error::DirectoryPayloadRangeCheck)?),
+                ValueOrLocation::EntryRelativeOffset(y) => Ok(y
+                        .checked_add(entry_base_location)
+                        .ok_or(Error::DirectoryPayloadRangeCheck)?),
+        }
+    }
+    pub fn payload_beginning(&self, entry: &Item) -> Result<Location> {
+        let source = entry.source(self.directory_address_mode)?;
+        self.location_of_source(source, 0/* FIXME: There's an
+addressing mode that makes the source payload addresses be
+relative to "ImageBase". Whatever that means. This 0 is what
+it's relative to.
+
+Currently, we are not using that addressing mode.
+*/)
     }
 
     pub(crate) fn add_entry_direct(&mut self, entry: &Item) -> Result<()> {
@@ -794,6 +860,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         }
         self.write_efh()?;
         let result = BhdDirectory::create(
+            beginning.into(),
             default_entry_address_mode,
             *b"$BHD",
             self.amd_physical_mode_mmio_size,
@@ -839,6 +906,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         self.efh.set_psp_directory_table_location_zen(beginning.into());
         self.write_efh()?;
         let result = PspDirectory::create(
+            beginning.into(),
             default_entry_address_mode,
             *b"$PSP",
             self.amd_physical_mode_mmio_size,
@@ -847,7 +915,27 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         )?;
         Ok(result)
     }
-
+    pub fn combo_subdirectory(
+        &self,
+        directory: &ComboDirectory,
+        entry: &ComboDirectoryEntry,
+    ) -> Result<PspDirectory> {
+        let beginning = directory.payload_beginning(entry)?;
+        let directory = PspDirectory::load(self.storage, beginning, self.amd_physical_mode_mmio_size)?;
+        Ok(directory)
+    }
+    pub fn psp_subdirectory(
+        &self,
+        directory: &PspDirectory,
+    ) -> Result<PspDirectory> {
+        for entry in directory.entries() {
+            if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
+                let beginning = directory.payload_beginning(&entry)?;
+                return PspDirectory::load(self.storage, beginning, self.amd_physical_mode_mmio_size)
+            }
+        }
+        Err(Error::EntryNotFound)
+    }
     pub fn create_psp_subdirectory(
         &self,
         directory: &mut PspDirectory,
@@ -869,6 +957,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
         )?)?;
         PspDirectory::create(
+            beginning.into(),
             directory.directory_address_mode,
             *b"$PL2",
             amd_physical_mode_mmio_size,
