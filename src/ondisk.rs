@@ -501,49 +501,49 @@ impl ValueOrLocation {
 /// similar to make_accessors, but which doesn't generate any of the setters
 /// or getters.  Instead, it just defines the user-friendly "Serde"* struct.
 macro_rules! make_bitfield_serde {(
-        $(#[$struct_meta:meta])*
-        $struct_vis:vis
-        struct $StructName:ident {
-                $(
-                        $(#[$field_meta:meta])*
-                        $field_vis:vis
-                        $field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
-                ),* $(,)?
-        }
+    $(#[$struct_meta:meta])*
+    $struct_vis:vis
+    struct $StructName:ident {
+        $(
+            $(#[$field_meta:meta])*
+            $field_vis:vis
+            $field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
+        ),* $(,)?
+    }
 ) => {
-	$(#[$struct_meta])*
-	$struct_vis
-	struct $StructName {
-		$(
-			$(#[$field_meta])*
-			$field_vis
-			$field_name : $field_ty,
-		)*
-	}
+    $(#[$struct_meta])*
+    $struct_vis
+    struct $StructName {
+        $(
+            $(#[$field_meta])*
+            $field_vis
+            $field_name : $field_ty,
+        )*
+    }
 
-	impl $StructName {
-		pub fn builder() -> Self {
-			Self::new()
-		}
-		pub fn build(&self) -> Self {
-			self.clone()
-		}
-	}
+    impl $StructName {
+        pub fn builder() -> Self {
+                Self::new()
+        }
+        pub fn build(&self) -> Self {
+                self.clone()
+        }
+    }
 
-	paste::paste! {
-                #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-		#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-		//#[serde(remote = "" $StructName)]
-		pub(crate) struct [<Serde $StructName>] {
-			$(
-				$(
-					$getter_vis
-					//pub(crate)
-					$field_name : <$field_ty as Specifier>::InOut, // $field_user_ty
-				)?
-			)*
-		}
-	}
+    paste::paste! {
+        #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+        #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+        //#[serde(remote = "" $StructName)]
+        pub(crate) struct [<Serde $StructName>] {
+            $(
+                $(
+                    $getter_vis
+                    //pub(crate)
+                    $field_name : <$field_ty as Specifier>::InOut, // $field_user_ty
+                )?
+            )*
+        }
+    }
 }}
 
 make_bitfield_serde! {

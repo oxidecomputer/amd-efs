@@ -164,83 +164,82 @@ impl DummyErrorChecks for bool {}
 /// the struct inside the macro parameter at the usage site, not before the
 /// macro call. Field syntax:   NAME: TYPE[: pub get TYPE [:pub set TYPE]]
 macro_rules! make_accessors {(
-	$(#[$struct_meta:meta])*
-	$struct_vis:vis
-	struct $StructName:ident {
-		$(
-			$(#[$field_meta:meta])*
-			$field_vis:vis
-			$field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
-		),* $(,)?
-	}
+    $(#[$struct_meta:meta])*
+    $struct_vis:vis
+    struct $StructName:ident {
+        $(
+            $(#[$field_meta:meta])*
+            $field_vis:vis
+            $field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
+        ),* $(,)?
+    }
 ) => (
-	$(#[$struct_meta])*
-	$struct_vis
-	struct $StructName {
-		$(
-			$(#[$field_meta])*
-			$field_vis
-			$field_name: $field_ty,
-		)*
-	}
+    $(#[$struct_meta])*
+    $struct_vis
+    struct $StructName {
+        $(
+            $(#[$field_meta])*
+            $field_vis
+            $field_name: $field_ty,
+        )*
+    }
 
-	impl $StructName {
-		pub fn builder() -> Self {
-			Self::default()
-		}
-		pub fn build(&self) -> Self {
-			self.clone()
-		}
-		$($(
-			#[inline]
-			$getter_vis
-			fn $field_name (self: &'_ Self)
-				-> Result<$field_user_ty>
-			{
-				self.$field_name.get1()
-			}
-			$(
-			  paste::paste! {
-				  #[inline]
-				  $setter_vis
-				  fn [<set_ $field_name>] (self: &'_ mut Self, value: $field_setter_user_ty) {
-					  self.$field_name.set1(value)
-				  }
+    impl $StructName {
+        pub fn builder() -> Self {
+            Self::default()
+        }
+        pub fn build(&self) -> Self {
+            self.clone()
+        }
+        $($(
+            #[inline]
+            $getter_vis
+            fn $field_name (self: &'_ Self)
+                -> Result<$field_user_ty>
+            {
+                self.$field_name.get1()
+            }
+            $(
+                paste::paste! {
+                #[inline]
+                $setter_vis
+                fn [<set_ $field_name>] (self: &'_ mut Self, value: $field_setter_user_ty) {
+                    self.$field_name.set1(value)
+                }
 
-				  #[inline]
-				  #[must_use]
-				  $setter_vis
-				  fn [<with_ $field_name>]<'a>(self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
-					  let result = self;
-					  result.$field_name.set1(value);
-					  result
-				  }
-			  }
-			)?
-		)?)*
-	}
+                #[inline]
+                #[must_use]
+                $setter_vis
+                fn [<with_ $field_name>]<'a>(self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
+                    let result = self;
+                    result.$field_name.set1(value);
+                    result
+                }
+            }
+        )?)?)*
+    }
 
-	// for serde
-	paste::paste!{
-		#[doc(hidden)]
-		#[cfg(feature = "serde")]
-		#[derive(serde::Serialize, serde::Deserialize)]
-		#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-		// Make it possible to just delegate serde entirely to
-		// this struct instead of $StructName
-		#[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
-		// Doing remoting automatically would make it impossible for the user to use another one.
-		// Since the config format presumably needs to be
-		// backward-compatible, that wouldn't be such a great idea.
-		//#[serde(remote = "" $StructName)]
-		pub(crate) struct [<Serde $StructName>] {
-			$(
-				$($(
-					pub $field_name: $field_setter_user_ty,
-				)?)?
-			)*
-		}
-	}
+    // for serde
+    paste::paste!{
+        #[doc(hidden)]
+        #[cfg(feature = "serde")]
+        #[derive(serde::Serialize, serde::Deserialize)]
+        #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+        // Make it possible to just delegate serde entirely to
+        // this struct instead of $StructName
+        #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
+        // Doing remoting automatically would make it impossible for the user to use another one.
+        // Since the config format presumably needs to be
+        // backward-compatible, that wouldn't be such a great idea.
+        //#[serde(remote = "" $StructName)]
+        pub(crate) struct [<Serde $StructName>] {
+            $(
+                $($(
+                    pub $field_name: $field_setter_user_ty,
+                )?)?
+            )*
+        }
+    }
 )}
 
 pub(crate) use make_accessors;
