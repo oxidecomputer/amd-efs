@@ -29,6 +29,10 @@ pub struct Directory<
     const MAIN_HEADER_SIZE: usize,
     const ITEM_SIZE: usize,
 > {
+    // Heuristics: It's the beginning of a PSP directory, if we want such a
+    // connection from the directory we are actually reading.
+    // Otherwise it's 0.
+    mode3_base: Location,
     beginning: Location, // mostly to help following outward pointers
     directory_address_mode: AddressMode,
     header: MainHeader,
@@ -75,9 +79,10 @@ impl<
     }
 
     /// Note: Caller has to check whether it is the right cookie (possibly afterwards)!
-    pub fn load<'a, T: FlashRead>(
+    fn load<'a, T: FlashRead>(
         storage: &'a T,
         beginning: Location,
+        mode3_base: Location,
         amd_physical_mode_mmio_size: Option<u32>,
     ) -> Result<Self> {
         let mut buf: [u8; MAIN_HEADER_SIZE] = [0xff; MAIN_HEADER_SIZE];
@@ -124,6 +129,7 @@ impl<
                     }
                     Ok(Self {
                         beginning,
+                        mode3_base,
                         directory_address_mode,
                         header: *header,
                         directory_headers_size: Self::minimal_directory_size(
@@ -141,6 +147,7 @@ impl<
     }
     fn create(
         beginning: Location,
+        mode3_base: Location,
         directory_address_mode: AddressMode,
         cookie: [u8; 4],
         amd_physical_mode_mmio_size: Option<u32>,
@@ -148,7 +155,7 @@ impl<
         entries: &[Item],
     ) -> Result<Self> {
         // This DIRECTORY mode is currently unsupported by PSP ABL.
-        if directory_address_mode == AddressMode::EntryRelativeOffset {
+        if directory_address_mode == AddressMode::OtherDirectoryRelativeOffset {
             return Err(Error::DirectoryTypeMismatch);
         }
         let mut header = MainHeader::default();
@@ -161,6 +168,7 @@ impl<
         };
         let mut result = Self {
             beginning,
+            mode3_base,
             directory_address_mode,
             header,
             directory_headers_size: Self::minimal_directory_size(
@@ -301,23 +309,14 @@ impl<
                 .beginning
                 .checked_add(y)
                 .ok_or(Error::DirectoryPayloadRangeCheck)?),
-            ValueOrLocation::EntryRelativeOffset(y) => Ok(y
+            ValueOrLocation::OtherDirectoryRelativeOffset(y) => Ok(y
                 .checked_add(entry_base_location)
                 .ok_or(Error::DirectoryPayloadRangeCheck)?),
         }
     }
     pub fn payload_beginning(&self, entry: &Item) -> Result<Location> {
         let source = entry.source(self.directory_address_mode)?;
-        self.location_of_source(
-            source,
-            0, /* FIXME: There's an
-              addressing mode that makes the source payload addresses be
-              relative to "ImageBase". Whatever that means. This 0 is what
-              it's relative to.
-
-              Currently, we are not using that addressing mode.
-              */
-        )
+        self.location_of_source(source, self.mode3_base)
     }
 
     pub(crate) fn add_entry_direct(&mut self, entry: &Item) -> Result<()> {
@@ -393,6 +392,7 @@ impl<'a, T: FlashRead + FlashWrite> Iterator for EfhBhdsIterator<'a, T> {
                 return BhdDirectory::load(
                     self.storage,
                     position,
+                    0,
                     self.amd_physical_mode_mmio_size,
                 )
                 .ok(); // FIXME: error check
@@ -567,6 +567,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             match PspDirectory::load(
                 self.storage,
                 psp_directory_table_location,
+                psp_directory_table_location,
                 self.amd_physical_mode_mmio_size,
             ) {
                 Ok(directory) => {
@@ -603,6 +604,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 let directory = PspDirectory::load(
                     self.storage,
                     psp_directory_table_location,
+                    psp_directory_table_location,
                     self.amd_physical_mode_mmio_size,
                 )?;
                 if directory.header.cookie == *b"$PSP" {
@@ -628,6 +630,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             match ComboDirectory::load(
                 self.storage,
                 psp_directory_table_location,
+                0,
                 self.amd_physical_mode_mmio_size,
             ) {
                 Ok(directory) => {
@@ -663,6 +666,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 let directory = ComboDirectory::load(
                     self.storage,
                     psp_directory_table_location,
+                    0, // always global address mode, so does not matter.
                     self.amd_physical_mode_mmio_size,
                 )?;
                 if directory.header.cookie == *b"2PSP" {
@@ -829,7 +833,8 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                     return Err(Error::DirectoryTypeMismatch);
                 }
             }
-            AddressMode::EfsRelativeOffset => {
+            AddressMode::EfsRelativeOffset
+            | AddressMode::DirectoryRelativeOffset => {
                 if self.physical_address_mode() {
                     return Err(Error::DirectoryTypeMismatch);
                 }
@@ -859,6 +864,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         self.write_efh()?;
         let result = BhdDirectory::create(
             beginning.into(),
+            0,
             default_entry_address_mode,
             *b"$BHD",
             self.amd_physical_mode_mmio_size,
@@ -883,7 +889,8 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                     return Err(Error::DirectoryTypeMismatch);
                 }
             }
-            AddressMode::EfsRelativeOffset => {
+            AddressMode::EfsRelativeOffset
+            | AddressMode::DirectoryRelativeOffset => {
                 if self.physical_address_mode() {
                     return Err(Error::DirectoryTypeMismatch);
                 }
@@ -905,6 +912,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         self.write_efh()?;
         let result = PspDirectory::create(
             beginning.into(),
+            beginning.into(),
             default_entry_address_mode,
             *b"$PSP",
             self.amd_physical_mode_mmio_size,
@@ -922,6 +930,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         let directory = PspDirectory::load(
             self.storage,
             beginning,
+            directory.beginning, // TODO: verify.
             self.amd_physical_mode_mmio_size,
         )?;
         Ok(directory)
@@ -936,6 +945,26 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 return PspDirectory::load(
                     self.storage,
                     beginning,
+                    beginning,
+                    self.amd_physical_mode_mmio_size,
+                );
+            }
+        }
+        Err(Error::EntryNotFound)
+    }
+    /// Given a PSP directory, find a second level BHD directory (if any)
+    /// that is a payload of the former and return that.
+    pub fn psp_ab_bhd_subdirectory(
+        &self,
+        directory: &PspDirectory,
+    ) -> Result<BhdDirectory> {
+        for entry in directory.entries() {
+            if entry.type_() == PspDirectoryEntryType::SecondLevelBhdDirectory {
+                let beginning = directory.payload_beginning(&entry)?;
+                return BhdDirectory::load(
+                    self.storage,
+                    beginning,
+                    directory.beginning,
                     self.amd_physical_mode_mmio_size,
                 );
             }
@@ -963,6 +992,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             Some(ValueOrLocation::EfsRelativeOffset(beginning.into())),
         )?)?;
         PspDirectory::create(
+            beginning.into(),
             beginning.into(),
             directory.directory_address_mode,
             *b"$PL2",
