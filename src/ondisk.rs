@@ -317,9 +317,9 @@ pub enum AddressMode {
     /// Right-justified in 4 GiB address space.
     /// Only really used in families older than Rome.
     PhysicalAddress = 0,
-    EfsRelativeOffset = 1,       // x
-    DirectoryRelativeOffset = 2, // (x - Base)
-    EntryRelativeOffset = 3, // x; ImageBaseRelativeOffset == DirectoryRelativeOffset; not Base
+    EfsRelativeOffset = 1,            // x
+    DirectoryRelativeOffset = 2,      // (x - Base)
+    OtherDirectoryRelativeOffset = 3, // (x - other.Base);
 }
 
 pub(crate) const WEAK_ADDRESS_MODE: AddressMode =
@@ -332,7 +332,7 @@ pub enum ValueOrLocation {
     PhysicalAddress(u32),
     EfsRelativeOffset(u32),
     DirectoryRelativeOffset(u32),
-    EntryRelativeOffset(u32),
+    OtherDirectoryRelativeOffset(u32),
 }
 
 impl core::fmt::Debug for ValueOrLocation {
@@ -348,8 +348,8 @@ impl core::fmt::Debug for ValueOrLocation {
             Self::DirectoryRelativeOffset(x) => {
                 write!(fmt, "DirectoryRelativeOffset({:#x?})", x)
             }
-            Self::EntryRelativeOffset(x) => {
-                write!(fmt, "EntryRelativeOffset({:#x?})", x)
+            Self::OtherDirectoryRelativeOffset(x) => {
+                write!(fmt, "OtherDirectoryRelativeOffset({:#x?})", x)
             }
         }
     }
@@ -421,8 +421,8 @@ impl ValueOrLocation {
             AddressMode::DirectoryRelativeOffset => {
                 Self::DirectoryRelativeOffset(value)
             }
-            AddressMode::EntryRelativeOffset => {
-                Self::EntryRelativeOffset(value)
+            AddressMode::OtherDirectoryRelativeOffset => {
+                Self::OtherDirectoryRelativeOffset(value)
             }
         })
     }
@@ -480,10 +480,10 @@ impl ValueOrLocation {
                     Err(Error::EntryTypeMismatch)
                 }
             }
-            ValueOrLocation::EntryRelativeOffset(x) => {
+            ValueOrLocation::OtherDirectoryRelativeOffset(x) => {
                 if Self::is_entry_address_mode_effective(
                     directory_address_mode,
-                    AddressMode::EntryRelativeOffset,
+                    AddressMode::OtherDirectoryRelativeOffset,
                 ) {
                     let v = u64::from(*x) | 0xC000_0000_0000_0000;
                     Ok(v)
@@ -752,9 +752,14 @@ pub enum PspDirectoryEntryType {
     TosSecurityPolicyBinary = 0x45,
     ExternalChipsetPspBootloader46 = 0x46,
     DrtmTa = 0x47,
-    L2aPspDirectory = 0x48,
-    L2BhdDirectory = 0x49,
-    L2bPspDirectory = 0x4A,
+    // Put into root PSP directory, if at all.
+    SecondLevelAPspDirectory = 0x48, // multiple of those entries are possible
+    // Put into SecondLevelAPspDirectory or SecondLevelBPspDirectory, payload
+    // being a SecondLevelABhdDirectory or SecondLevelBBhdDirectory,
+    // respectively.
+    SecondLevelBhdDirectory = 0x49,
+    // Put into root PSP directory, if at all.
+    SecondLevelBPspDirectory = 0x4A,
     ExternalChipsetSecurityPolicyBinary = 0x4C,
     ExternalChipsetSecureDebugUnlockBinary = 0x4D,
     PmuPublicKey = 0x4E,
