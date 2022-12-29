@@ -20,9 +20,9 @@ use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
-pub fn header_from_collection_mut<'a, T: Sized + FromBytes + AsBytes>(
-    buf: &'a mut [u8],
-) -> Option<&'a mut T> {
+pub fn header_from_collection_mut<T: Sized + FromBytes + AsBytes>(
+    buf: &mut [u8],
+) -> Option<&mut T> {
     match LayoutVerified::<_, T>::new_from_prefix(buf) {
         Some((item, _xbuf)) => Some(item.into_mut()),
         None => None,
@@ -31,9 +31,7 @@ pub fn header_from_collection_mut<'a, T: Sized + FromBytes + AsBytes>(
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
-pub fn header_from_collection<'a, T: Sized + FromBytes>(
-    buf: &'a [u8],
-) -> Option<&'a T> {
+pub fn header_from_collection<T: Sized + FromBytes>(buf: &[u8]) -> Option<&T> {
     match LayoutVerified::<_, T>::new_from_prefix(buf) {
         Some((item, _xbuf)) => Some(item.into_ref()),
         None => None,
@@ -338,23 +336,24 @@ pub enum ValueOrLocation {
 impl core::fmt::Debug for ValueOrLocation {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
-            Self::Value(x) => write!(fmt, "Value({:x?})", x),
+            Self::Value(x) => write!(fmt, "Value({x:x?})"),
             Self::PhysicalAddress(x) => {
-                write!(fmt, "PhysicalAddress({:#x?})", x)
+                write!(fmt, "PhysicalAddress({x:#x?})")
             }
             Self::EfsRelativeOffset(x) => {
-                write!(fmt, "EfsRelativeOffset({:#x?})", x)
+                write!(fmt, "EfsRelativeOffset({x:#x?})")
             }
             Self::DirectoryRelativeOffset(x) => {
-                write!(fmt, "DirectoryRelativeOffset({:#x?})", x)
+                write!(fmt, "DirectoryRelativeOffset({x:#x?})")
             }
             Self::OtherDirectoryRelativeOffset(x) => {
-                write!(fmt, "OtherDirectoryRelativeOffset({:#x?})", x)
+                write!(fmt, "OtherDirectoryRelativeOffset({x:#x?})")
             }
         }
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn mmio_encode(
     value: Location,
     amd_physical_mode_mmio_size: Option<u32>,
@@ -363,9 +362,7 @@ pub(crate) fn mmio_encode(
         None | Some(0) => return Err(Error::DirectoryTypeMismatch),
         Some(x) => 1 + (0xFFFF_FFFFu32 - x),
     };
-    Ok(value
-        .checked_add(mmio_address_lower)
-        .ok_or(Error::DirectoryTypeMismatch)?)
+    value.checked_add(mmio_address_lower).ok_or(Error::DirectoryTypeMismatch)
 }
 
 pub(crate) fn mmio_decode(
@@ -533,6 +530,7 @@ macro_rules! make_bitfield_serde {(
     paste::paste! {
         #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
         #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+        #[allow(dead_code)]
         //#[serde(remote = "" $StructName)]
         pub(crate) struct [<Serde $StructName>] {
             $(
@@ -595,7 +593,7 @@ impl DirectoryAdditionalInfo {
         &mut self,
         value: u16,
     ) -> core::result::Result<(), modular_bitfield::error::OutOfBounds> {
-        let mut mask = u32::from(*self) & !0b1111_0000000000;
+        let mut mask = u32::from(*self) & !0b11_1100_0000_0000;
         if value > 0 && value <= 15 {
             mask |= (value as u32) << 10;
         } else if value == 16 { // 64 kiB
@@ -946,7 +944,7 @@ impl DirectoryEntrySerde for PspDirectoryEntry {
         Some(*result.into_ref())
     }
     fn copy_into_slice(&self, destination: &mut [u8]) {
-        destination.copy_from_slice(&self.as_bytes())
+        destination.copy_from_slice(self.as_bytes())
     }
 }
 
@@ -991,7 +989,7 @@ impl PspDirectoryEntry {
     }
     /// Note: Caller can modify other attributes using the with_ accessors.
     pub fn new_value(type_: PspDirectoryEntryType, value: u64) -> Result<Self> {
-        let mut result = Self::new().with_type_(type_.into()).build();
+        let mut result = Self::new().with_type_(type_).build();
         result.internal_size = Self::SIZE_VALUE_MARKER.into();
         result.internal_source = value.into();
         Ok(result)
@@ -1003,7 +1001,7 @@ impl PspDirectoryEntry {
         size: Option<u32>,
         source: Option<ValueOrLocation>,
     ) -> Result<Self> {
-        let mut result = Self::new().with_type_(type_.into()).build();
+        let mut result = Self::new().with_type_(type_).build();
         result.set_size(size);
         if let Some(x) = source {
             result.set_source(directory_address_mode, x)?;
@@ -1227,7 +1225,7 @@ impl DirectoryEntrySerde for BhdDirectoryEntry {
         Some(*result.into_ref())
     }
     fn copy_into_slice(&self, destination: &mut [u8]) {
-        destination.copy_from_slice(&self.as_bytes())
+        destination.copy_from_slice(self.as_bytes())
     }
 }
 
@@ -1351,19 +1349,16 @@ impl BhdDirectoryEntry {
         destination_location: Option<u64>,
     ) -> Result<Self> {
         let mut result = Self::new()
-            .with_type_(type_.into())
-            .with_internal_destination_location(
-                match destination_location {
-                    None => Self::DESTINATION_NONE_MARKER,
-                    Some(x) => {
-                        if x == Self::DESTINATION_NONE_MARKER {
-                            return Err(Error::EntryTypeMismatch);
-                        }
-                        x
+            .with_type_(type_)
+            .with_internal_destination_location(match destination_location {
+                None => Self::DESTINATION_NONE_MARKER,
+                Some(x) => {
+                    if x == Self::DESTINATION_NONE_MARKER {
+                        return Err(Error::EntryTypeMismatch);
                     }
+                    x
                 }
-                .into(),
-            )
+            })
             .build();
         result.set_size(size);
         if let Some(x) = source {
@@ -1528,8 +1523,7 @@ impl DirectoryHeader for ComboDirectoryHeader {
 impl ComboDirectoryHeader {
     pub fn new(cookie: [u8; 4]) -> Result<Self> {
         if cookie == *b"2PSP" || cookie == *b"2BHD" {
-            let mut result = Self::default();
-            result.cookie = cookie;
+            let result = Self { cookie, ..Default::default() };
             Ok(result)
         } else {
             Err(Error::DirectoryTypeMismatch)
@@ -1561,7 +1555,7 @@ impl DirectoryEntrySerde for ComboDirectoryEntry {
         Some(*result.into_ref())
     }
     fn copy_into_slice(&self, destination: &mut [u8]) {
-        destination.copy_from_slice(&self.as_bytes())
+        destination.copy_from_slice(self.as_bytes())
     }
 }
 
@@ -1616,8 +1610,8 @@ impl DirectoryEntry for ComboDirectoryEntry {
     fn size(&self) -> Option<u32> {
         None
     }
-    fn set_size(&mut self, value: Option<u32>) {
-        assert!(false);
+    fn set_size(&mut self, _value: Option<u32>) {
+        todo!()
     }
 }
 
@@ -1635,11 +1629,11 @@ impl ComboDirectoryEntry {
         match value {
             ComboDirectoryEntryFilter::PspId(value) => {
                 self.internal_key.set(0);
-                self.internal_value.set(value.into());
+                self.internal_value.set(value);
             }
             ComboDirectoryEntryFilter::ChipFamilyId(value) => {
                 self.internal_key.set(0);
-                self.internal_value.set(value.into());
+                self.internal_value.set(value);
             }
         }
     }
