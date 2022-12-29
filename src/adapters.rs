@@ -55,6 +55,7 @@ impl FlashWrite for Upper16MiBFlashAdapter<'_> {
 }
 
 impl<'a> Upper16MiBFlashAdapter<'a> {
+    #[allow(dead_code)]
     pub fn new(
         underlying_reader: &'a dyn FlashRead,
         underlying_writer: &'a dyn FlashWrite,

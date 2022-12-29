@@ -1,26 +1,30 @@
 use crate::amdfletcher32::AmdFletcher32;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
+#[cfg(feature = "std")]
+use crate::ondisk::DirectoryAdditionalInfo;
 use crate::ondisk::DirectoryEntrySerde;
 pub use crate::ondisk::ProcessorGeneration;
 use crate::ondisk::EFH_POSITION;
 use crate::ondisk::{
-    mmio_decode, mmio_encode, AddressMode, BhdDirectoryEntry,
-    BhdDirectoryEntryType, BhdDirectoryHeader, ComboDirectoryEntry,
-    ComboDirectoryHeader, DirectoryAdditionalInfo, DirectoryEntry,
-    DirectoryHeader, Efh, EfhBulldozerSpiMode, EfhNaplesSpiMode,
-    EfhRomeSpiMode, PspDirectoryEntry, PspDirectoryEntryType,
-    PspDirectoryHeader, ValueOrLocation, WEAK_ADDRESS_MODE,
+    mmio_decode, AddressMode, BhdDirectoryEntry, BhdDirectoryHeader,
+    ComboDirectoryEntry, ComboDirectoryHeader, DirectoryEntry, DirectoryHeader,
+    Efh, EfhBulldozerSpiMode, EfhNaplesSpiMode, EfhRomeSpiMode,
+    PspDirectoryEntry, PspDirectoryEntryType, PspDirectoryHeader,
+    ValueOrLocation, WEAK_ADDRESS_MODE,
 };
 use crate::types::Error;
 use crate::types::Result;
-use amd_flash::{
-    ErasableLocation, ErasableRange, FlashRead, FlashWrite, Location,
-};
+#[cfg(feature = "std")]
+use amd_flash::ErasableRange;
+use amd_flash::{ErasableLocation, FlashRead, FlashWrite, Location};
 use core::convert::TryInto;
 use core::mem::size_of;
 use zerocopy::AsBytes;
 use zerocopy::FromBytes;
+
+// XXX: This is arbitrary.
+const MAX_DIRECTORY_ENTRIES: usize = 64;
 
 // TODO: split into Directory and DirectoryContents (disjunct) if requested in additional_info.
 pub struct Directory<
@@ -36,13 +40,12 @@ pub struct Directory<
     beginning: Location, // mostly to help following outward pointers
     directory_address_mode: AddressMode,
     header: MainHeader,
-    directory_headers_size: u32,
     // On AMD, this field specifies how much of the memory area under
     // address 2**32 (towards lower addresses) is used to memory-map
     // Flash. This is used in order to store pointers to other
     // areas on Flash (with ValueOrLocation::PhysicalAddress).
     amd_physical_mode_mmio_size: Option<u32>,
-    entries: [Item; 64],
+    entries: [Item; MAX_DIRECTORY_ENTRIES],
 }
 
 impl<
@@ -58,8 +61,6 @@ impl<
         const ITEM_SIZE: usize,
     > Directory<MainHeader, Item, MAIN_HEADER_SIZE, ITEM_SIZE>
 {
-    const MAX_DIRECTORY_ENTRIES: usize = 64; // FIXME
-
     pub fn header(&self) -> MainHeader {
         self.header
     }
@@ -79,8 +80,8 @@ impl<
     }
 
     /// Note: Caller has to check whether it is the right cookie (possibly afterwards)!
-    fn load<'a, T: FlashRead>(
-        storage: &'a T,
+    fn load<T: FlashRead>(
+        storage: &T,
         beginning: Location,
         mode3_base: Location,
         amd_physical_mode_mmio_size: Option<u32>,
@@ -105,12 +106,16 @@ impl<
                         | AddressMode::DirectoryRelativeOffset => {}
                         _ => return Err(Error::DirectoryTypeMismatch),
                     }
-                    let mut entries = [Item::default(); 64];
+                    let mut entries = [Item::default(); MAX_DIRECTORY_ENTRIES];
                     let mut cursor = beginning
                         .checked_add(MAIN_HEADER_SIZE as u32)
                         .ok_or(Error::DirectoryRangeCheck)?;
-                    for i in 0..(header.total_entries() as usize) {
-                        if i < 64 {
+                    for (i, ie) in entries
+                        .iter_mut()
+                        .enumerate()
+                        .take(header.total_entries() as usize)
+                    {
+                        if i < MAX_DIRECTORY_ENTRIES {
                             let mut buf: [u8; ITEM_SIZE] = [0xff; ITEM_SIZE];
                             assert_eq!(ITEM_SIZE, size_of::<Item>()); // TODO: move to compile-time
                             storage.read_exact(cursor, &mut buf)?;
@@ -119,7 +124,7 @@ impl<
                                 .ok_or(Error::DirectoryRangeCheck)?;
                             match header_from_collection::<Item>(&buf[..]) {
                                 Some(entry) => {
-                                    entries[i] = *entry;
+                                    *ie = *entry;
                                 }
                                 None => return Err(Error::Marshal),
                             }
@@ -132,9 +137,6 @@ impl<
                         mode3_base,
                         directory_address_mode,
                         header: *header,
-                        directory_headers_size: Self::minimal_directory_size(
-                            header.total_entries(),
-                        )?,
                         amd_physical_mode_mmio_size,
                         entries,
                     })
@@ -151,7 +153,6 @@ impl<
         directory_address_mode: AddressMode,
         cookie: [u8; 4],
         amd_physical_mode_mmio_size: Option<u32>,
-        payloads_beginning: Option<ErasableLocation>,
         entries: &[Item],
     ) -> Result<Self> {
         // This DIRECTORY mode is currently unsupported by PSP ABL.
@@ -160,22 +161,13 @@ impl<
         }
         let mut header = MainHeader::default();
         header.set_cookie(cookie);
-        let payloads_beginning = match payloads_beginning {
-            Some(x) => Location::from(x),
-            None => {
-                todo!()
-            }
-        };
         let mut result = Self {
             beginning,
             mode3_base,
             directory_address_mode,
             header,
-            directory_headers_size: Self::minimal_directory_size(
-                Self::MAX_DIRECTORY_ENTRIES as u32,
-            )?,
             amd_physical_mode_mmio_size,
-            entries: [Item::default(); 64], // FIXME
+            entries: [Item::default(); MAX_DIRECTORY_ENTRIES],
         };
         for entry in entries {
             result.add_entry_direct(entry)?;
@@ -184,6 +176,7 @@ impl<
     }
     /// Updates the main header checksum.  Also updates total_entries (in the same header) to TOTAL_ENTRIES.
     /// Precondition: Since the checksum is over the entire directory, that means that all the directory entries needs to be correct already.
+    #[allow(dead_code)]
     fn update_main_header(&mut self, total_entries: u32) -> Result<()> {
         let mut checksummer = AmdFletcher32::new();
         //let mut skip: usize = 12; // Skip fields "signature", "checksum" and "total_entries"
@@ -266,7 +259,7 @@ impl<
         core::iter::from_fn(move || {
             if index < self.header.total_entries() as usize {
                 let result = self.entries[index];
-                index = index + 1;
+                index += 1;
                 Some(result)
             } else {
                 None
@@ -282,27 +275,21 @@ impl<
             ValueOrLocation::Value(_) => Err(Error::DirectoryTypeMismatch),
             ValueOrLocation::PhysicalAddress(y) => {
                 // or unknown
-                self.amd_physical_mode_mmio_size.map(|size| {
-                                mmio_decode(y, size)
-                                        .or_else(|_|
-                                                // Older Zen models
-                                                // also allowed a
-                                                // flash offset here.
-                                                // So allow that as
-                                                // well.
-                                                // TODO: Maybe thread
-                                                // through the
-                                                // processor
-                                                // generation and
-                                                // only do on Naples
-                                                // and Rome.
-                                                if y < size {
-                                                        Ok(y)
-                                                } else {
-                                                        Err(Error::EntryTypeMismatch)
-                                                }
-                                        )
-                        }).ok_or(Error::EntryTypeMismatch)?
+                self.amd_physical_mode_mmio_size
+                    .map(|size| {
+                        mmio_decode(y, size).or(
+                            // Older Zen models also allowed a flash offset
+                            // here.  So allow that as well.
+                            // TODO: Maybe thread through the processor
+                            // generation and only do on Naples and Rome.
+                            if y < size {
+                                Ok(y)
+                            } else {
+                                Err(Error::EntryTypeMismatch)
+                            },
+                        )
+                    })
+                    .ok_or(Error::EntryTypeMismatch)?
             }
             ValueOrLocation::EfsRelativeOffset(x) => Ok(x),
             ValueOrLocation::DirectoryRelativeOffset(y) => Ok(self
@@ -452,9 +439,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                         None => true,
                     }
                 {
-                    return Ok(storage
+                    return storage
                         .erasable_location(*position)
-                        .ok_or(Error::Misaligned)?);
+                        .ok_or(Error::Misaligned);
                 }
             }
         }
@@ -472,9 +459,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                         _ => false,
                     }
                 {
-                    return Ok(storage
+                    return storage
                         .erasable_location(*position)
-                        .ok_or(Error::Misaligned)?);
+                        .ok_or(Error::Misaligned);
                 }
             }
         }
@@ -494,8 +481,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         processor_generation: Option<ProcessorGeneration>,
         amd_physical_mode_mmio_size: Option<u32>,
     ) -> Result<Self> {
-        let efh_beginning =
-            Self::efh_beginning(&storage, processor_generation)?;
+        let efh_beginning = Self::efh_beginning(storage, processor_generation)?;
         let mut xbuf: [u8; size_of::<Efh>()] = [0; size_of::<Efh>()];
         storage.read_exact(efh_beginning.into(), &mut xbuf)?;
         let efh = header_from_collection::<Efh>(&xbuf[..])
@@ -824,7 +810,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         beginning: ErasableLocation,
         end: ErasableLocation,
         default_entry_address_mode: AddressMode,
-        payloads_beginning: Option<ErasableLocation>,
         entries: &[BhdDirectoryEntry],
     ) -> Result<BhdDirectory> {
         match default_entry_address_mode {
@@ -868,7 +853,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             default_entry_address_mode,
             *b"$BHD",
             self.amd_physical_mode_mmio_size,
-            payloads_beginning,
             entries,
         )?;
         Ok(result)
@@ -880,7 +864,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         beginning: ErasableLocation,
         end: ErasableLocation,
         default_entry_address_mode: AddressMode,
-        payloads_beginning: Option<ErasableLocation>,
         entries: &[PspDirectoryEntry],
     ) -> Result<PspDirectory> {
         match default_entry_address_mode {
@@ -916,7 +899,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             default_entry_address_mode,
             *b"$PSP",
             self.amd_physical_mode_mmio_size,
-            payloads_beginning,
             entries,
         )?;
         Ok(result)
@@ -977,7 +959,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         beginning: ErasableLocation,
         end: ErasableLocation,
         amd_physical_mode_mmio_size: Option<u32>,
-        payloads_beginning: Option<ErasableLocation>,
         entries: &[PspDirectoryEntry],
     ) -> Result<PspDirectory> {
         if directory.header.cookie() != *b"$PSP" {
@@ -985,7 +966,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         }
         // TODO
         // if let Err(Error::EntryNotFound) = self.psp_subdirectory(directory) {
-        directory.add_entry_direct(&mut PspDirectoryEntry::new_payload(
+        directory.add_entry_direct(&PspDirectoryEntry::new_payload(
             directory.directory_address_mode(),
             PspDirectoryEntryType::SecondLevelDirectory,
             Some(ErasableLocation::extent(beginning, end)),
@@ -997,7 +978,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             directory.directory_address_mode,
             *b"$PL2",
             amd_physical_mode_mmio_size,
-            payloads_beginning,
             entries,
         )
         // } else {
@@ -1009,7 +989,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         &self,
         beginning: ErasableLocation,
         end: ErasableLocation,
-        payloads_beginning: Option<ErasableLocation>,
         entries: &[PspDirectoryEntry],
     ) -> Result<PspDirectory> {
         let mut psp_directory = self.psp_directory()?;
@@ -1018,7 +997,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             beginning,
             end,
             self.amd_physical_mode_mmio_size,
-            payloads_beginning,
             entries,
         )
     }
