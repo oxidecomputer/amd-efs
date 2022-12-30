@@ -18,6 +18,7 @@ use crate::types::Result;
 #[cfg(feature = "std")]
 use amd_flash::ErasableRange;
 use amd_flash::{ErasableLocation, FlashRead, FlashWrite, Location};
+use core::array;
 use core::convert::TryInto;
 use core::mem::size_of;
 use zerocopy::AsBytes;
@@ -79,7 +80,7 @@ impl<
             .map_err(|_| Error::DirectoryRangeCheck)
     }
 
-    /// Note: Caller has to check whether it is the right cookie (possibly afterwards)!
+    /// Note: Caller should check whether it is the right cookie (afterwards)
     fn load<T: FlashRead>(
         storage: &T,
         beginning: Location,
@@ -92,12 +93,7 @@ impl<
         match header_from_collection::<MainHeader>(&buf[..]) {
             Some(header) => {
                 let cookie = header.cookie();
-                if cookie == *b"$PSP"
-                    || cookie == *b"$PL2"
-                    || cookie == *b"$BHD"
-                    || cookie == *b"$BL2"
-                    || cookie == *b"2PSP"
-                {
+                if MainHeader::ALLOWED_COOKIES.contains(&cookie) {
                     let directory_address_mode =
                         header.additional_info().address_mode();
                     match directory_address_mode {
@@ -141,7 +137,7 @@ impl<
                         entries,
                     })
                 } else {
-                    Err(Error::Marshal)
+                    Err(Error::DirectoryTypeMismatch)
                 }
             }
             None => Err(Error::Marshal),
@@ -211,6 +207,11 @@ impl<
         range: ErasableRange,
         payloads_beginning: ErasableLocation,
     ) -> Result<ErasableRange> {
+        let cookie = self.header.cookie();
+        if !MainHeader::ALLOWED_COOKIES.contains(&cookie) {
+            return Err(Error::DirectoryTypeMismatch);
+        }
+
         let total_entries = self.header.total_entries();
         //let additional_info = self.header.additional_info();
         let additional_info = DirectoryAdditionalInfo::new()
@@ -356,36 +357,6 @@ impl
         } else {
             Err(Error::EntryTypeMismatch)
         }
-    }
-}
-
-pub struct EfhBhdsIterator<'a, T: FlashRead + FlashWrite> {
-    storage: &'a T,
-    physical_address_mode: bool,
-    positions: [u32; 4], // 0xffff_ffff: invalid
-    index_into_positions: usize,
-    amd_physical_mode_mmio_size: Option<u32>,
-}
-
-impl<'a, T: FlashRead + FlashWrite> Iterator for EfhBhdsIterator<'a, T> {
-    type Item = BhdDirectory;
-    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        while self.index_into_positions < self.positions.len() {
-            let position = self.positions[self.index_into_positions];
-            self.index_into_positions += 1;
-            if position != 0xffff_ffff && position != 0
-            /* sigh.  Some images have 0 as "invalid" mark */
-            {
-                return BhdDirectory::load(
-                    self.storage,
-                    position,
-                    0,
-                    self.amd_physical_mode_mmio_size,
-                )
-                .ok(); // FIXME: error check
-            }
-        }
-        None
     }
 }
 
@@ -545,61 +516,35 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             .psp_directory_table_location_zen()
             .ok()
             .unwrap_or(0xffff_ffff);
-        if psp_directory_table_location == 0xffff_ffff
-            || psp_directory_table_location == 0
-        {
+        if Efh::is_invalid_directory_table_location(
+            psp_directory_table_location,
+        ) {
+            // Note: We could also check efh.psp_directory_location_naples(),
+            // but not even a newer Naples did that.
             Err(Error::PspDirectoryHeaderNotFound)
         } else {
-            match PspDirectory::load(
+            let psp_directory_table_location = if self.physical_address_mode() {
+                assert!(Efh::is_invalid_directory_table_location(
+                    self.efh.psp_directory_table_location_naples()?
+                ));
+                Efh::de_mmio(
+                    psp_directory_table_location,
+                    self.amd_physical_mode_mmio_size,
+                ).ok_or(Error::Marshal)?
+            } else {
+                assert!(Efh::is_likely_location(psp_directory_table_location));
+                psp_directory_table_location
+            };
+            let directory = PspDirectory::load(
                 self.storage,
                 psp_directory_table_location,
                 psp_directory_table_location,
                 self.amd_physical_mode_mmio_size,
-            ) {
-                Ok(directory) => {
-                    if directory.header.cookie == *b"$PSP" {
-                        // level 1 PSP header should have "$PSP" cookie
-                        return Ok(directory);
-                    }
-                }
-                Err(Error::Marshal) => {}
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-
-            // That's the same fallback AMD does on Naples:
-
-            let psp_directory_table_location = {
-                let addr = self
-                    .efh
-                    .psp_directory_table_location_naples()
-                    .ok()
-                    .unwrap_or(0xffff_ffff);
-                if addr == 0xffff_ffff {
-                    addr
-                } else {
-                    addr & 0x00ff_ffff
-                }
-            };
-            if psp_directory_table_location == 0xffff_ffff
-                || psp_directory_table_location == 0
-            {
-                Err(Error::PspDirectoryHeaderNotFound)
-            } else {
-                let directory = PspDirectory::load(
-                    self.storage,
-                    psp_directory_table_location,
-                    psp_directory_table_location,
-                    self.amd_physical_mode_mmio_size,
-                )?;
-                if directory.header.cookie == *b"$PSP" {
-                    // level 1 PSP header should have "$PSP" cookie
-                    Ok(directory)
-                } else {
-                    Err(Error::Marshal)
-                }
+            )?;
+            if directory.header.cookie != PspDirectoryHeader::FIRST_LEVEL_COOKIE {
+                return Err(Error::DirectoryTypeMismatch);
             }
+            Ok(directory)
         }
     }
 
@@ -610,162 +555,145 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             .psp_directory_table_location_zen()
             .ok()
             .unwrap_or(0xffff_ffff);
-        if psp_directory_table_location == 0xffff_ffff {
+        if Efh::is_invalid_directory_table_location(
+            psp_directory_table_location,
+        ) {
             Err(Error::PspDirectoryHeaderNotFound)
         } else {
-            match ComboDirectory::load(
+            let psp_directory_table_location = if self.physical_address_mode() {
+                assert!(Efh::is_invalid_directory_table_location(
+                    self.efh.psp_directory_table_location_naples()?
+                ));
+                Efh::de_mmio(
+                    psp_directory_table_location,
+                    self.amd_physical_mode_mmio_size,
+                ).ok_or(Error::Marshal)?
+            } else {
+                assert!(Efh::is_likely_location(psp_directory_table_location));
+                psp_directory_table_location
+            };
+            let directory = ComboDirectory::load(
                 self.storage,
                 psp_directory_table_location,
                 0,
                 self.amd_physical_mode_mmio_size,
-            ) {
-                Ok(directory) => {
-                    if directory.header.cookie == *b"2PSP" {
-                        return Ok(directory);
-                    }
-                }
-                Err(Error::Marshal) => {}
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-
-            // That's the same fallback AMD does on Naples:
-
-            let psp_directory_table_location = {
-                let addr = self
-                    .efh
-                    .psp_directory_table_location_naples()
-                    .ok()
-                    .unwrap_or(0xffff_ffff);
-                if addr == 0xffff_ffff {
-                    addr
-                } else {
-                    addr & 0x00ff_ffff
-                }
-            };
-            if psp_directory_table_location == 0xffff_ffff
-                || psp_directory_table_location == 0
-            {
-                Err(Error::PspDirectoryHeaderNotFound)
-            } else {
-                let directory = ComboDirectory::load(
-                    self.storage,
-                    psp_directory_table_location,
-                    0, // always global address mode, so does not matter.
-                    self.amd_physical_mode_mmio_size,
-                )?;
-                if directory.header.cookie == *b"2PSP" {
-                    Ok(directory)
-                } else {
-                    Err(Error::Marshal)
-                }
+            )?;
+            if directory.header.cookie != ComboDirectoryHeader::PSP_COOKIE {
+                return Err(Error::DirectoryTypeMismatch);
             }
+            Ok(directory)
         }
     }
 
     /// Returns an iterator over level 1 BHD directories.
     /// If PROCESSOR_GENERATION is Some, then only return the directories
     /// matching that generation.
+
+    // The thing at each Location can be one of those things:
+    // * A ComboDirectory with entries' payload of type BhdDirectory
+    // * A BhdDirectory
+    // Therefore, just return locations.
     pub fn bhd_directories(
         &self,
         processor_generation: Option<ProcessorGeneration>,
-    ) -> Result<EfhBhdsIterator<T>> {
-        /// Given V which is possibly a MMIO address (from inside a
-        /// directory entry), convert it to a regular offset
-        /// relative to the beginning of the flash.
-        fn de_mmio(v: u32, amd_physical_mode_mmio_size: Option<u32>) -> u32 {
-            if v == 0xffff_ffff || v == 0 {
-                0xffff_ffff
-            } else if let Some(amd_physical_mode_mmio_size) =
-                amd_physical_mode_mmio_size
-            {
-                match mmio_decode(v, amd_physical_mode_mmio_size) {
-                    Ok(v) => v,
-                    Err(Error::DirectoryTypeMismatch) => {
-                        // Rome is a grey-area that supports both MMIO addresses and offsets
-                        if v < amd_physical_mode_mmio_size {
-                            v
-                        } else {
-                            0xffff_ffff
-                        }
-                    }
-                    Err(_) => 0xffff_ffff,
-                }
-            } else {
-                0xffff_ffff
-            }
-        }
+    ) -> Result<impl Iterator<Item = Location>> {
         let efh = &self.efh;
         let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
-        let invalid_position = 0xffff_ffffu32;
         let positions = match processor_generation {
             Some(ProcessorGeneration::Milan) => [
                 efh.bhd_directory_table_milan()
-                    .ok()
-                    .unwrap_or(invalid_position),
-                invalid_position,
-                invalid_position,
-                invalid_position,
+                    .ok(),
+                None,
+                None,
+                None,
             ],
             Some(ProcessorGeneration::Rome) => [
-                de_mmio(
+                Efh::de_mmio(
                     efh.bhd_directory_tables[2].get(),
                     amd_physical_mode_mmio_size,
                 ),
-                invalid_position,
-                invalid_position,
-                invalid_position,
+                None,
+                None,
+                None,
             ],
             Some(ProcessorGeneration::Naples) => [
-                de_mmio(
+                Efh::de_mmio(
                     efh.bhd_directory_tables[0].get(),
                     amd_physical_mode_mmio_size,
                 ),
-                invalid_position,
-                invalid_position,
-                invalid_position,
+                None,
+                None,
+                None,
             ],
             None => [
                 // allow all (used for example for overlap checking)
                 efh.bhd_directory_table_milan()
-                    .ok()
-                    .unwrap_or(invalid_position),
-                de_mmio(
+                    .ok(),
+                Efh::de_mmio(
                     efh.bhd_directory_tables[2].get(),
                     amd_physical_mode_mmio_size,
                 ),
-                de_mmio(
+                Efh::de_mmio(
                     efh.bhd_directory_tables[1].get(),
                     amd_physical_mode_mmio_size,
                 ),
-                de_mmio(
+                Efh::de_mmio(
                     efh.bhd_directory_tables[0].get(),
                     amd_physical_mode_mmio_size,
                 ),
             ],
         };
-        Ok(EfhBhdsIterator {
-            storage: self.storage,
-            physical_address_mode: self.physical_address_mode(),
-            positions,
-            index_into_positions: 0,
-            amd_physical_mode_mmio_size: self.amd_physical_mode_mmio_size,
-        })
+        Ok(array::IntoIter::new(positions).filter(|&position| {
+            position.is_some()
+        }).map(|position|
+            position.unwrap()
+        ))
     }
 
     /// Return the directory matching PROCESSOR_GENERATION,
-    /// or any directory if that is None.
+    /// or any directory if the former is None.
+    /// Note: Either bhd_directory or bhd_combo_directory will succeed--but not both.
     pub fn bhd_directory(
         &self,
         processor_generation: Option<ProcessorGeneration>,
     ) -> Result<BhdDirectory> {
-        if let Some(bhd_directory) =
-            self.bhd_directories(processor_generation).unwrap().next()
-        {
-            return Ok(bhd_directory);
+        let bhd_directory_table_location = self
+            .bhd_directories(processor_generation)?
+            .next()
+            .ok_or(Error::BhdDirectoryHeaderNotFound)?;
+        let directory = BhdDirectory::load(
+            self.storage,
+            bhd_directory_table_location,
+            0,
+            self.amd_physical_mode_mmio_size,
+        )?;
+        if directory.header.cookie != BhdDirectoryHeader::FIRST_LEVEL_COOKIE {
+            return Err(Error::DirectoryTypeMismatch);
         }
-        Err(Error::BhdDirectoryHeaderNotFound)
+        Ok(directory)
+    }
+
+    /// Return the directory matching PROCESSOR_GENERATION,
+    /// or any directory if the former is None.
+    /// Note: Either bhd_directory or bhd_combo_directory will succeed--but not both.
+    pub fn bhd_combo_directory(
+        &self,
+        processor_generation: Option<ProcessorGeneration>,
+    ) -> Result<ComboDirectory> {
+        let bhd_directory_table_location = self
+            .bhd_directories(processor_generation)?
+            .next()
+            .ok_or(Error::BhdDirectoryHeaderNotFound)?;
+        let directory = ComboDirectory::load(
+            self.storage,
+            bhd_directory_table_location,
+            0,
+            self.amd_physical_mode_mmio_size,
+        )?;
+        if directory.header.cookie != ComboDirectoryHeader::BHD_COOKIE {
+            return Err(Error::DirectoryTypeMismatch);
+        }
+        Ok(directory)
     }
 
     fn write_efh(&mut self) -> Result<()> {
@@ -851,7 +779,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             beginning.into(),
             0,
             default_entry_address_mode,
-            *b"$BHD",
+            BhdDirectoryHeader::FIRST_LEVEL_COOKIE,
             self.amd_physical_mode_mmio_size,
             entries,
         )?;
@@ -890,32 +818,43 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             }
         }
         // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.
-        // Then, also psp_directory_table_location_naples should be set, instead.
         self.efh.set_psp_directory_table_location_zen(beginning.into());
         self.write_efh()?;
         let result = PspDirectory::create(
             beginning.into(),
             beginning.into(),
             default_entry_address_mode,
-            *b"$PSP",
+            PspDirectoryHeader::FIRST_LEVEL_COOKIE,
             self.amd_physical_mode_mmio_size,
             entries,
         )?;
         Ok(result)
     }
-    pub fn combo_subdirectory(
+    pub fn psp_combo_subdirectory(
         &self,
         directory: &ComboDirectory,
         entry: &ComboDirectoryEntry,
     ) -> Result<PspDirectory> {
         let beginning = directory.payload_beginning(entry)?;
-        let directory = PspDirectory::load(
+        PspDirectory::load(
             self.storage,
             beginning,
             directory.beginning, // TODO: verify.
             self.amd_physical_mode_mmio_size,
-        )?;
-        Ok(directory)
+        )
+    }
+    pub fn bhd_combo_subdirectory(
+        &self,
+        directory: &ComboDirectory,
+        entry: &ComboDirectoryEntry,
+    ) -> Result<BhdDirectory> {
+        let beginning = directory.payload_beginning(entry)?;
+        BhdDirectory::load(
+            self.storage,
+            beginning,
+            directory.beginning, // TODO: verify.
+            self.amd_physical_mode_mmio_size,
+        )
     }
     pub fn psp_subdirectory(
         &self,
@@ -961,7 +900,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         amd_physical_mode_mmio_size: Option<u32>,
         entries: &[PspDirectoryEntry],
     ) -> Result<PspDirectory> {
-        if directory.header.cookie() != *b"$PSP" {
+        if directory.header.cookie() != PspDirectoryHeader::FIRST_LEVEL_COOKIE {
             return Err(Error::DirectoryTypeMismatch);
         }
         // TODO

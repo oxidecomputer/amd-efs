@@ -253,6 +253,13 @@ pub enum ProcessorGeneration {
 }
 
 impl Efh {
+    /// As a safeguard, this finds out whether the EFH position V is likely a
+    /// flash location from the beginning of the flash.
+    /// If it's more than 4 GB then we don't accept it (in that case, it's
+    /// more likely to be an MMIO address or garbage).
+    pub(crate) fn is_likely_location(v: u32) -> bool {
+        v & 0xff00_0000 == 0
+    }
     /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
     /// Old (pre-Rome) boards had MMIO addresses instead of offsets in the slots.  Find out whether that's the case.
     pub fn second_gen_efs(&self) -> bool {
@@ -264,6 +271,44 @@ impl Efh {
     pub fn physical_address_mode(&self) -> bool {
         !self.second_gen_efs()
     }
+
+    /// Given V which is possibly a MMIO address (from inside an
+    /// EFH entry), convert it to a regular offset
+    /// relative to the beginning of the flash.
+    /// The result is None on error.
+    pub(crate) fn de_mmio(
+        v: u32,
+        amd_physical_mode_mmio_size: Option<u32>,
+    ) -> Option<Location> {
+        if Efh::is_invalid_directory_table_location(v) {
+            None
+        } else if let Some(amd_physical_mode_mmio_size) =
+            amd_physical_mode_mmio_size
+        {
+            match mmio_decode(v, amd_physical_mode_mmio_size) {
+                Ok(v) => Some(v),
+                Err(Error::DirectoryTypeMismatch) => {
+                    // Rome is a grey-area that supports both MMIO addresses and offsets
+                    if v < amd_physical_mode_mmio_size {
+                        Some(v)
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }
+        } else if Self::is_likely_location(v) {
+            Some(v)
+        } else {
+            None
+        }
+    }
+    pub fn is_invalid_directory_table_location(beginning: u32) -> bool {
+        // AMD sometimes does 0 as well--even though that seems like a really
+        // bad idea.
+        beginning == 0xffff_ffff || beginning == 0
+    }
+
     /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
     /// Note: generation 1 is Milan
     pub fn compatible_with_processor_generation(
@@ -619,6 +664,7 @@ impl DirectoryAdditionalInfo {
 }
 
 pub trait DirectoryHeader {
+    const ALLOWED_COOKIES: [[u8; 4]; 2];
     fn cookie(&self) -> [u8; 4];
     fn set_cookie(&mut self, value: [u8; 4]);
     fn additional_info(&self) -> DirectoryAdditionalInfo;
@@ -638,7 +684,13 @@ pub struct PspDirectoryHeader {
     pub(crate) additional_info: LU32, // 0xffff_ffff; or DirectoryAdditionalInfo
 }
 
+impl PspDirectoryHeader {
+    pub const FIRST_LEVEL_COOKIE: [u8; 4] = *b"$PSP";
+    pub const SECOND_LEVEL_COOKIE: [u8; 4] = *b"$PL2";
+}
+
 impl DirectoryHeader for PspDirectoryHeader {
+    const ALLOWED_COOKIES: [[u8; 4]; 2] = [*b"$PSP", *b"$PL2"];
     fn cookie(&self) -> [u8; 4] {
         self.cookie
     }
@@ -1088,7 +1140,13 @@ pub struct BhdDirectoryHeader {
     pub(crate) additional_info: LU32,
 }
 
+impl BhdDirectoryHeader {
+    pub const FIRST_LEVEL_COOKIE: [u8; 4] = *b"$BHD";
+    pub const SECOND_LEVEL_COOKIE: [u8; 4] = *b"$BL2";
+}
+
 impl DirectoryHeader for BhdDirectoryHeader {
+    const ALLOWED_COOKIES: [[u8; 4]; 2] = [*b"$BHD", *b"$BL2"];
     fn cookie(&self) -> [u8; 4] {
         self.cookie
     }
@@ -1496,6 +1554,7 @@ impl Default for ComboDirectoryHeader {
 }
 
 impl DirectoryHeader for ComboDirectoryHeader {
+    const ALLOWED_COOKIES: [[u8; 4]; 2] = [*b"2PSP", *b"2BHD"];
     fn cookie(&self) -> [u8; 4] {
         self.cookie
     }
@@ -1521,8 +1580,10 @@ impl DirectoryHeader for ComboDirectoryHeader {
 }
 
 impl ComboDirectoryHeader {
+    pub const PSP_COOKIE: [u8; 4] = *b"2PSP";
+    pub const BHD_COOKIE: [u8; 4] = *b"2BHD";
     pub fn new(cookie: [u8; 4]) -> Result<Self> {
-        if cookie == *b"2PSP" || cookie == *b"2BHD" {
+        if cookie == Self::PSP_COOKIE || cookie == Self::BHD_COOKIE {
             let result = Self { cookie, ..Default::default() };
             Ok(result)
         } else {
