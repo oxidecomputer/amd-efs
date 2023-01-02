@@ -206,7 +206,7 @@ impl<
         destination: &T,
         range: ErasableRange,
         payloads_beginning: ErasableLocation,
-    ) -> Result<ErasableRange> {
+    ) -> Result<usize> {
         let cookie = self.header.cookie();
         if !MainHeader::ALLOWED_COOKIES.contains(&cookie) {
             return Err(Error::DirectoryTypeMismatch);
@@ -245,15 +245,15 @@ impl<
         self.header.set_additional_info(additional_info);
         self.header.set_additional_info(additional_info);
         self.update_main_header(total_entries)?;
-        let size = Self::minimal_directory_size(total_entries)?;
-        let (range, rest) = range.split_at_least(size as usize);
+        //let size = Self::minimal_directory_size(total_entries)?;
+        //let _ = range.take_at_least(size as usize);
         let mut result = Vec::<u8>::new();
         result.extend_from_slice(self.header.as_bytes());
         for entry in &self.entries[..total_entries as usize] {
             result.extend_from_slice(entry.as_bytes());
         }
         destination.erase_and_write_blocks(range.beginning, &result)?;
-        Ok(rest)
+        Ok(result.len())
     }
     pub fn entries(&self) -> impl Iterator<Item = Item> + '_ {
         let mut index = 0usize;
@@ -393,7 +393,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again
     // (I think it would be better to have the user just construct two
     // different Efs instances in that case)
-    const EFH_SIZE: u32 = 0x200;
     pub(crate) fn efh_beginning(
         storage: &T,
         processor_generation: Option<ProcessorGeneration>,
@@ -530,7 +529,8 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 Efh::de_mmio(
                     psp_directory_table_location,
                     self.amd_physical_mode_mmio_size,
-                ).ok_or(Error::Marshal)?
+                )
+                .ok_or(Error::Marshal)?
             } else {
                 assert!(Efh::is_likely_location(psp_directory_table_location));
                 psp_directory_table_location
@@ -541,7 +541,8 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 psp_directory_table_location,
                 self.amd_physical_mode_mmio_size,
             )?;
-            if directory.header.cookie != PspDirectoryHeader::FIRST_LEVEL_COOKIE {
+            if directory.header.cookie != PspDirectoryHeader::FIRST_LEVEL_COOKIE
+            {
                 return Err(Error::DirectoryTypeMismatch);
             }
             Ok(directory)
@@ -567,7 +568,8 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 Efh::de_mmio(
                     psp_directory_table_location,
                     self.amd_physical_mode_mmio_size,
-                ).ok_or(Error::Marshal)?
+                )
+                .ok_or(Error::Marshal)?
             } else {
                 assert!(Efh::is_likely_location(psp_directory_table_location));
                 psp_directory_table_location
@@ -600,13 +602,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         let efh = &self.efh;
         let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
         let positions = match processor_generation {
-            Some(ProcessorGeneration::Milan) => [
-                efh.bhd_directory_table_milan()
-                    .ok(),
-                None,
-                None,
-                None,
-            ],
+            Some(ProcessorGeneration::Milan) => {
+                [efh.bhd_directory_table_milan().ok(), None, None, None]
+            }
             Some(ProcessorGeneration::Rome) => [
                 Efh::de_mmio(
                     efh.bhd_directory_tables[2].get(),
@@ -627,8 +625,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             ],
             None => [
                 // allow all (used for example for overlap checking)
-                efh.bhd_directory_table_milan()
-                    .ok(),
+                efh.bhd_directory_table_milan().ok(),
                 Efh::de_mmio(
                     efh.bhd_directory_tables[2].get(),
                     amd_physical_mode_mmio_size,
@@ -643,11 +640,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 ),
             ],
         };
-        Ok(array::IntoIter::new(positions).filter(|&position| {
-            position.is_some()
-        }).map(|position|
-            position.unwrap()
-        ))
+        Ok(array::IntoIter::new(positions)
+            .filter(|&position| position.is_some())
+            .map(|position| position.unwrap()))
     }
 
     /// Return the directory matching PROCESSOR_GENERATION,
