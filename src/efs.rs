@@ -732,7 +732,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
     }
 
     /// Note: BEGINNING, END are coordinates (in Byte).
-    /// Note: We always create the directory and the contents adjacent, with gap in order to allow creating new directory entries when there are already contents.
     pub fn create_bhd_directory(
         &mut self,
         beginning: ErasableLocation,
