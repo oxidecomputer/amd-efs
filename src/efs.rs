@@ -18,7 +18,6 @@ use crate::types::Result;
 #[cfg(feature = "std")]
 use amd_flash::ErasableRange;
 use amd_flash::{ErasableLocation, FlashRead, FlashWrite, Location};
-use core::array;
 use core::convert::TryInto;
 use core::mem::size_of;
 use zerocopy::AsBytes;
@@ -640,9 +639,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 ),
             ],
         };
-        Ok(array::IntoIter::new(positions)
-            .filter(|&position| position.is_some())
-            .map(|position| position.unwrap()))
+        Ok(IntoIterator::into_iter(positions).flatten())
     }
 
     /// Return the directory matching PROCESSOR_GENERATION,
@@ -734,6 +731,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         default_entry_address_mode: AddressMode,
         entries: &[BhdDirectoryEntry],
     ) -> Result<BhdDirectory> {
+        assert_eq!(beginning.erasable_block_size(), end.erasable_block_size());
         match default_entry_address_mode {
             AddressMode::PhysicalAddress => {
                 if !self.physical_address_mode() {
@@ -750,7 +748,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         }
         match self.bhd_directories(None) {
             Ok(items) => {
-                for directory in items {
+                for _directory in items {
                     // TODO: Ensure that we don't have too many similar ones
                 }
             }
@@ -788,6 +786,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         default_entry_address_mode: AddressMode,
         entries: &[PspDirectoryEntry],
     ) -> Result<PspDirectory> {
+        assert_eq!(beginning.erasable_block_size(), end.erasable_block_size());
         match default_entry_address_mode {
             AddressMode::PhysicalAddress => {
                 if !self.physical_address_mode() {
