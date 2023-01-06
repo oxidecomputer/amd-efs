@@ -23,7 +23,7 @@ impl BuildProfile {
     /// Returns a new BuildProfile constructed from the
     /// given args.
     fn new(matches: &clap::ArgMatches) -> BuildProfile {
-        if matches.contains_id("release") {
+        if matches.get_flag("release") {
             BuildProfile::Release
         } else {
             BuildProfile::Debug
@@ -68,11 +68,11 @@ impl BuildArgs {
 fn main() {
     let matches = parse_args();
     match matches.subcommand() {
-        Some(("build", m)) => build(BuildArgs::new(m), m.contains_id("locked")),
-        Some(("test", m)) => test(BuildArgs::new(m), m.contains_id("locked")),
-        Some(("tests", m)) => tests(BuildArgs::new(m), m.contains_id("locked")),
+        Some(("build", m)) => build(BuildArgs::new(m), m.get_flag("locked")),
+        Some(("test", m)) => test(BuildArgs::new(m), m.get_flag("locked")),
+        Some(("tests", m)) => tests(BuildArgs::new(m), m.get_flag("locked")),
         Some(("expand", _m)) => expand(),
-        Some(("clippy", m)) => clippy(m.contains_id("locked")),
+        Some(("clippy", m)) => clippy(m.get_flag("locked")),
         Some(("clean", _m)) => clean(),
         _ => {
             println!("Unknown command");
