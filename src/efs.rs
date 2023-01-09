@@ -215,21 +215,15 @@ impl<
         //let additional_info = self.header.additional_info();
         let additional_info = DirectoryAdditionalInfo::new()
             .with_max_size_checked(
-                DirectoryAdditionalInfo::try_into_unit(
-                    range
-                        .capacity()
-                        .try_into()
-                        .map_err(|_| Error::DirectoryRangeCheck)?,
-                )
-                .ok_or(Error::DirectoryRangeCheck)?,
+                DirectoryAdditionalInfo::try_into_unit(range.capacity())
+                    .ok_or(Error::DirectoryRangeCheck)?,
             )
             .map_err(|_| Error::DirectoryRangeCheck)?
             .with_spi_block_size_checked(
                 DirectoryAdditionalInfo::try_into_unit(
-                    destination.erasable_block_size() as usize,
+                    destination.erasable_block_size(),
                 )
-                .ok_or(Error::DirectoryRangeCheck)?, // .try_into()
-                                                     // .map_err(|_| Error::DirectoryRangeCheck)?,
+                .ok_or(Error::DirectoryRangeCheck)?,
             )
             .map_err(|_| Error::DirectoryRangeCheck)?
             .with_base_address(
