@@ -848,7 +848,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         directory: &PspDirectory,
     ) -> Result<PspDirectory> {
         for entry in directory.entries() {
-            if entry.type_() == PspDirectoryEntryType::SecondLevelDirectory {
+            if let Ok(PspDirectoryEntryType::SecondLevelDirectory) =
+                entry.typ_or_err()
+            {
                 let beginning = directory.payload_beginning(&entry)?;
                 return PspDirectory::load(
                     self.storage,
@@ -867,7 +869,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         directory: &PspDirectory,
     ) -> Result<BhdDirectory> {
         for entry in directory.entries() {
-            if entry.type_() == PspDirectoryEntryType::SecondLevelBhdDirectory {
+            if let Ok(PspDirectoryEntryType::SecondLevelBhdDirectory) =
+                entry.typ_or_err()
+            {
                 let beginning = directory.payload_beginning(&entry)?;
                 return BhdDirectory::load(
                     self.storage,

@@ -1000,48 +1000,59 @@ impl DirectoryEntrySerde for PspDirectoryEntry {
     }
 }
 
+macro_rules! make_attr_proxy_with_fallible_getter {(
+    $our_name:ident,
+    $attr_name:ident,
+    $attr_type:ty
+) => {
+    paste::paste! {
+        pub fn [<$our_name _or_err>](&self) -> Result<$attr_type> {
+            let attrs = <Self as Attributed>::Attrs::from(self.attrs.get());
+            attrs.[<$attr_name _or_err>]().map_err(|_| Error::EntryTypeMismatch)
+        }
+        pub fn [<set_ $our_name>](&mut self, value: $attr_type) {
+            let mut attrs = <Self as Attributed>::Attrs::from(self.attrs.get());
+            attrs.[<set_ $attr_name>](value);
+            self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
+        }
+        pub fn [<with_ $our_name>](&mut self, value: $attr_type) -> &mut Self {
+            self.[<set_ $our_name>](value);
+            self
+        }
+    }
+}}
+macro_rules! make_attr_proxy {(
+    $our_name:ident,
+    $attr_name:ident,
+    $attr_type:ty
+) => {
+    make_attr_proxy_with_fallible_getter!($our_name, $attr_name, $attr_type);
+    paste::paste! {
+        pub fn [<$our_name>](&self) -> $attr_type {
+            self.[<$our_name _or_err>]().unwrap()
+        }
+    }
+}}
+
+trait Attributed {
+    type Attrs;
+}
+
+impl Attributed for PspDirectoryEntry {
+    type Attrs = PspDirectoryEntryAttrs;
+}
+
 impl PspDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
-    pub fn type_or_err(&self) -> Result<PspDirectoryEntryType> {
-        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.type__or_err().map_err(|_| Error::EntryTypeMismatch)
-    }
+    make_attr_proxy_with_fallible_getter!(typ, type_, PspDirectoryEntryType);
+    make_attr_proxy!(sub_program, sub_program, u8);
+    make_attr_proxy_with_fallible_getter!(rom_id, rom_id, PspDirectoryRomId);
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn with_type_(&mut self, value: PspDirectoryEntryType) -> &mut Self {
-        let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_type_(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn type_(&self) -> PspDirectoryEntryType {
-        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.type_()
-    }
-    pub fn with_sub_program(&mut self, value: u8) -> &mut Self {
-        let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_sub_program(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn sub_program(&self) -> u8 {
-        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.sub_program()
-    }
-    pub fn with_rom_id(&mut self, value: PspDirectoryRomId) -> &mut Self {
-        let mut attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_rom_id(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn rom_id(&self) -> PspDirectoryRomId {
-        let attrs = PspDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.rom_id()
-    }
     /// Note: Caller can modify other attributes using the with_ accessors.
     pub fn new_value(type_: PspDirectoryEntryType, value: u64) -> Result<Self> {
-        let mut result = Self::new().with_type_(type_).build();
+        let mut result = Self::new().with_typ(type_).build();
         result.internal_size = Self::SIZE_VALUE_MARKER.into();
         result.internal_source = value.into();
         Ok(result)
@@ -1053,7 +1064,7 @@ impl PspDirectoryEntry {
         size: Option<u32>,
         source: Option<ValueOrLocation>,
     ) -> Result<Self> {
-        let mut result = Self::new().with_type_(type_).build();
+        let mut result = Self::new().with_typ(type_).build();
         result.set_size(size);
         if let Some(x) = source {
             result.set_source(directory_address_mode, x)?;
@@ -1287,13 +1298,13 @@ impl DirectoryEntrySerde for BhdDirectoryEntry {
     }
 }
 
+impl Attributed for BhdDirectoryEntry {
+    type Attrs = BhdDirectoryEntryAttrs;
+}
+
 impl BhdDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     const DESTINATION_NONE_MARKER: u64 = 0xffff_ffff_ffff_ffff;
-    pub fn type_or_err(&self) -> Result<BhdDirectoryEntryType> {
-        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.type__or_err().map_err(|_| Error::EntryTypeMismatch)
-    }
 
     pub fn destination_location(&self) -> Option<u64> {
         let destination_location = self.internal_destination_location.get();
@@ -1303,95 +1314,27 @@ impl BhdDirectoryEntry {
             Some(destination_location)
         }
     }
-    pub fn with_type_(&mut self, value: BhdDirectoryEntryType) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_type_(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn with_region_type(
-        &mut self,
-        value: BhdDirectoryEntryRegionType,
-    ) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_region_type(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn with_reset_image(&mut self, value: bool) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_reset_image(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn set_reset_image(&mut self, value: bool) {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_reset_image(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-    }
-    pub fn with_copy_image(&mut self, value: bool) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_copy_image(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn set_copy_image(&mut self, value: bool) {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_copy_image(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-    }
-    pub fn with_read_only(&mut self, value: bool) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_read_only(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn set_read_only(&mut self, value: bool) {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_read_only(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-    }
-    pub fn with_compressed(&mut self, value: bool) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_compressed(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn set_compressed(&mut self, value: bool) {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_compressed(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-    }
-    pub fn with_instance(&mut self, value: u8) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_instance(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn instance(&self) -> u8 {
-        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.instance()
-    }
-    pub fn with_sub_program(&mut self, value: u8) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_sub_program(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn sub_program(&self) -> u8 {
-        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.sub_program()
-    }
-    pub fn with_rom_id(&mut self, value: BhdDirectoryRomId) -> &mut Self {
-        let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.set_rom_id(value);
-        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
-        self
-    }
-    pub fn rom_id(&self) -> BhdDirectoryRomId {
-        let attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
-        attrs.rom_id()
-    }
+    make_attr_proxy_with_fallible_getter!(typ, type_, BhdDirectoryEntryType);
+    make_attr_proxy_with_fallible_getter!(
+        region_type,
+        region_type,
+        BhdDirectoryEntryRegionType
+    );
+    make_attr_proxy!(reset_image, reset_image, bool);
+    make_attr_proxy!(copy_image, copy_image, bool);
+    make_attr_proxy!(read_only, read_only, bool);
+    make_attr_proxy!(compressed, compressed, bool);
+    // Actually u4--but serde freaks out.
+    // See <https://github.com/kjetilkjeka/uX/issues/17> for when we'd be able
+    // to use u4. Even then, modular-bitfield has ::InOut in order to "upgrade"
+    // to the next getter-/setter-able type--and that still won't use u4.
+    make_attr_proxy!(instance, instance, u8);
+    // Actually u3--but serde freaks out.
+    // See <https://github.com/kjetilkjeka/uX/issues/17> for when we'd be able
+    // to use u3. Even then, modular-bitfield has ::InOut in order to "upgrade"
+    // to the next getter-/setter-able type--and that still won't use u3.
+    make_attr_proxy!(sub_program, sub_program, u8);
+    make_attr_proxy_with_fallible_getter!(rom_id, rom_id, BhdDirectoryRomId);
     pub(crate) fn with_internal_destination_location(
         &mut self,
         value: u64,
@@ -1411,7 +1354,7 @@ impl BhdDirectoryEntry {
         destination_location: Option<u64>,
     ) -> Result<Self> {
         let mut result = Self::new()
-            .with_type_(type_)
+            .with_typ(type_)
             .with_internal_destination_location(match destination_location {
                 None => Self::DESTINATION_NONE_MARKER,
                 Some(x) => {
