@@ -1327,6 +1327,7 @@ impl BhdDirectoryEntry {
     pub fn set_reset_image(&mut self, value: bool) {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_reset_image(value);
+        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
     }
     pub fn with_copy_image(&mut self, value: bool) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
@@ -1337,6 +1338,7 @@ impl BhdDirectoryEntry {
     pub fn set_copy_image(&mut self, value: bool) {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_copy_image(value);
+        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
     }
     pub fn with_read_only(&mut self, value: bool) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
@@ -1347,6 +1349,7 @@ impl BhdDirectoryEntry {
     pub fn set_read_only(&mut self, value: bool) {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_read_only(value);
+        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
     }
     pub fn with_compressed(&mut self, value: bool) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
@@ -1357,6 +1360,7 @@ impl BhdDirectoryEntry {
     pub fn set_compressed(&mut self, value: bool) {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
         attrs.set_compressed(value);
+        self.attrs.set(u32::from_le_bytes(attrs.into_bytes()));
     }
     pub fn with_instance(&mut self, value: u8) -> &mut Self {
         let mut attrs = BhdDirectoryEntryAttrs::from(self.attrs.get());
