@@ -1021,18 +1021,22 @@ macro_rules! make_attr_proxy_with_fallible_getter {(
         }
     }
 }}
-macro_rules! make_attr_proxy {(
+macro_rules! make_attr_proxy {
+    (
     $our_name:ident,
     $attr_name:ident,
     $attr_type:ty
 ) => {
-    make_attr_proxy_with_fallible_getter!($our_name, $attr_name, $attr_type);
-    paste::paste! {
-        pub fn [<$our_name>](&self) -> $attr_type {
-            self.[<$our_name _or_err>]().unwrap()
+        make_attr_proxy_with_fallible_getter!(
+            $our_name, $attr_name, $attr_type
+        );
+        paste::paste! {
+            pub fn [<$our_name>](&self) -> $attr_type {
+                self.[<$our_name _or_err>]().unwrap()
+            }
         }
-    }
-}}
+    };
+}
 
 trait Attributed {
     type Attrs;
