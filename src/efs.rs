@@ -67,16 +67,14 @@ impl<
     pub fn directory_address_mode(&self) -> AddressMode {
         self.directory_address_mode
     }
-    pub fn minimal_directory_size(total_entries: u32) -> Result<u32> {
+    pub fn minimal_directory_size(total_entries: usize) -> Result<usize> {
         size_of::<MainHeader>()
             .checked_add(
                 size_of::<Item>()
                     .checked_mul(total_entries as usize)
                     .ok_or(Error::DirectoryRangeCheck)?,
             )
-            .ok_or(Error::DirectoryRangeCheck)?
-            .try_into()
-            .map_err(|_| Error::DirectoryRangeCheck)
+            .ok_or(Error::DirectoryRangeCheck)
     }
 
     /// Note: Caller should check whether it is the right cookie (afterwards)
