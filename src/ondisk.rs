@@ -51,11 +51,25 @@ pub const EFH_POSITION: [Location; 6] =
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub enum SpiReadMode {
+    #[cfg_attr(feature = "serde", serde(alias = "Normal 33.33 MHz"))]
     Normal33_33Mhz = 0b000, // up to 33.33 MHz
+    /// First digit of name: number of lines (bits) for the command
+    /// Second digit of name: number of lines (bits) for the address
+    /// Third digit of name: number of lines (bits) for the data
     Dual112 = 0b010,
+    /// First digit of name: number of lines (bits) for the command
+    /// Second digit of name: number of lines (bits) for the address
+    /// Third digit of name: number of lines (bits) for the data
     Quad114 = 0b011,
+    /// First digit of name: number of lines (bits) for the command
+    /// Second digit of name: number of lines (bits) for the address
+    /// Third digit of name: number of lines (bits) for the data
     Dual122 = 0b100,
+    /// First digit: number of lines (bits) for the command
+    /// Second digit: number of lines (bits) for the address
+    /// Third digit: number of lines (bits) for the data
     Quad144 = 0b101,
+    #[cfg_attr(feature = "serde", serde(alias = "Normal 66.66 MHz"))]
     Normal66_66Mhz = 0b110, // up to 66.66 MHz
     Fast = 0b111,
     DoNothing = 0xff,
@@ -67,11 +81,17 @@ pub enum SpiReadMode {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub enum SpiFastSpeedNew {
+    #[cfg_attr(feature = "serde", serde(alias = "66.66 MHz"))]
     _66_66MHz = 0,
+    #[cfg_attr(feature = "serde", serde(alias = "33.33 MHz"))]
     _33_33MHz = 1,
+    #[cfg_attr(feature = "serde", serde(alias = "22.22 MHz"))]
     _22_22MHz = 2,
+    #[cfg_attr(feature = "serde", serde(alias = "16.66 MHz"))]
     _16_66MHz = 3,
+    #[cfg_attr(feature = "serde", serde(alias = "100 MHz"))]
     _100MHz = 0b100,
+    #[cfg_attr(feature = "serde", serde(alias = "800 kHz"))]
     _800kHz = 0b101,
     DoNothing = 0xff,
 }
