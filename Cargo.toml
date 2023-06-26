@@ -1,13 +1,13 @@
 [package]
 name = "amd-efs"
-version = "0.2.4"
+version = "0.2.5"
 authors = ["Oxide Computer Company"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-amd-flash = { git = "ssh://git@github.com/oxidecomputer/amd-flash.git", tag = "v0.2.0" }
+amd-flash = { git = "ssh://git@github.com/oxidecomputer/amd-flash.git", tag = "v0.2.1" }
 byteorder = { version = "1.4.3", default-features = false }
 fletcher = "0.1.0"
 modular-bitfield = { version = "0.11.2", default-features = false }
@@ -26,9 +26,10 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 strum = { version = "0.23", default-features = false, features = [] }
 strum_macros = { version = "0.23.1" }
 zerocopy = "0.6"
+thiserror = { version = "1.0.38", optional = true }
 
 [features]
 default = []
-std = []
+std = ["thiserror", "amd-flash/std"]
 serde = []
 schemars = ["std", "serde", "dep:schemars"]
