@@ -52,7 +52,7 @@ pub const EFH_POSITION: [Location; 6] =
 #[non_exhaustive]
 pub enum SpiReadMode {
     #[cfg_attr(feature = "serde", serde(rename = "Normal up to 33.33 MHz"))]
-    Normal33_33Mhz = 0b000, // up to 33.33 MHz
+    Normal33_33MHz = 0b000, // up to 33.33 MHz
     /// First digit of name: number of lines (bits) for the command
     /// Second digit of name: number of lines (bits) for the address
     /// Third digit of name: number of lines (bits) for the data
@@ -70,7 +70,7 @@ pub enum SpiReadMode {
     /// Third digit: number of lines (bits) for the data
     Quad144 = 0b101,
     #[cfg_attr(feature = "serde", serde(rename = "Normal up to 66.66 MHz"))]
-    Normal66_66Mhz = 0b110, // up to 66.66 MHz
+    Normal66_66MHz = 0b110, // up to 66.66 MHz
     Fast = 0b111,
     DoNothing = 0xff,
 }
