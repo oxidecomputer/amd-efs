@@ -71,7 +71,7 @@ impl<
         size_of::<MainHeader>()
             .checked_add(
                 size_of::<Item>()
-                    .checked_mul(total_entries as usize)
+                    .checked_mul(total_entries)
                     .ok_or(Error::DirectoryRangeCheck)?,
             )
             .ok_or(Error::DirectoryRangeCheck)
