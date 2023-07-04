@@ -43,11 +43,22 @@ impl<T: FromPrimitive> Getter<Result<T>> for u8 {
         T::from_u8(self).ok_or(Error::EntryTypeMismatch)
     }
 }
+impl<T: FromPrimitive> Getter<Result<T>> for U16<LittleEndian> {
+    fn get1(self) -> Result<T> {
+        T::from_u16(self.get()).ok_or(Error::EntryTypeMismatch)
+    }
+}
 impl<T: FromPrimitive> Getter<Result<T>> for U32<LittleEndian> {
     fn get1(self) -> Result<T> {
         T::from_u32(self.get()).ok_or(Error::EntryTypeMismatch)
     }
 }
+impl<T: FromPrimitive> Getter<Result<T>> for U64<LittleEndian> {
+    fn get1(self) -> Result<T> {
+        T::from_u64(self.get()).ok_or(Error::EntryTypeMismatch)
+    }
+}
+
 // For Token
 impl<T: FromPrimitive> Getter<Result<T>> for u32 {
     fn get1(self) -> Result<T> {
@@ -143,6 +154,10 @@ pub(crate) trait DummyErrorChecks: Sized {
     }
 }
 
+impl DummyErrorChecks for u64 {}
+
+impl DummyErrorChecks for u32 {}
+
 impl DummyErrorChecks for u16 {}
 
 impl DummyErrorChecks for u8 {}
@@ -155,14 +170,40 @@ impl DummyErrorChecks for bool {}
 /// to use it for that, you still have to impl Serialize and Deserialize for
 /// the former manually--forwarding to the respective "Serde" struct--which
 /// does have "Serialize" and "Deserialize" implemented).
-/// Afterwards, it automatically impls getters (and setters) for the fields
-/// where there was "get" (and maybe "set") specified.
+/// Afterwards, it automatically impls getters (and maybe setters) for the
+/// fields where there was "get" (and maybe "set") specified.
 /// The getters and setters so generated are hardcoded as calling
 /// self.field.get1 and self.field.set1, respectively.  These are usually
-/// provided by a Getter and Getter trait impl (for example the ones in the same
-/// file this macro is in) Note: If you want to add a docstring, put it before
-/// the struct inside the macro parameter at the usage site, not before the
-/// macro call. Field syntax:   NAME: TYPE[: pub get TYPE [:pub set TYPE]]
+/// provided by a Getter and Setter trait impl (for example the ones in the same
+/// file this macro is in).
+///
+/// Note: If you want to add a docstring, put it before the struct inside the
+/// macro parameter at the usage site, not before the macro call.
+///
+/// This call also defines serde_* and serde_with* getters and setters with an
+/// optionally specified serde type that is used during serialization and
+/// deserialization
+///
+/// This also defines a "builder" fn that will be used by the deserializers at
+/// the very beginning. That fn just calls "default()" (out of
+/// necessity--because we don't want to have lots of extra partial struct
+/// definitions). This is different to what make_bitfield_serde does
+/// (where it calls "new()") (on purpose).
+///
+/// Field syntax:
+/// NAME [|| [SERDE_META]* SERDE_TYPE] : TYPE
+///      [| pub get GETTER_RETURN_TYPE [: pub set SETTER_PARAMETER_TYPE]]
+///
+/// The brackets denote optional parts.
+/// Defines field NAME as TYPE. TYPE usually has to be the lowest-level
+/// machine type (so it's "Little-endian u32", or "3 bits", or similar).
+/// SERDE_TYPE, if given, will be the type used for the serde field.
+/// If SERDE_TYPE is not given, TYPE will be used instead.
+/// The "pub get" will use the given GETTER_RETURN_TYPE as the resulting type
+/// of the generated getter, using Getter converters to get there as needed.
+/// The "pub set" will use the given SETTER_PARAMETER_TYPE as the
+/// parameter type of the generated setter, using Setter converters to get
+/// there as needed.
 macro_rules! make_accessors {(
     $(#[$struct_meta:meta])*
     $struct_vis:vis
@@ -170,7 +211,11 @@ macro_rules! make_accessors {(
         $(
             $(#[$field_meta:meta])*
             $field_vis:vis
-            $field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
+            $field_name:ident
+            $(|| $(#[$serde_field_orig_meta:meta])* $serde_ty:ty : $field_orig_ty:ty)?
+            $(: $field_ty:ty)?
+            $(| $getter_vis:vis get $field_user_ty:ty
+              $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
         ),* $(,)?
     }
 ) => (
@@ -180,63 +225,108 @@ macro_rules! make_accessors {(
         $(
             $(#[$field_meta])*
             $field_vis
-            $field_name: $field_ty,
+            $($field_name: $field_ty,)?
+            $($field_name: $field_orig_ty,)?
         )*
     }
 
     impl $StructName {
-        pub fn builder() -> Self {
-            Self::default()
-        }
+        #[allow(dead_code)]
         pub fn build(&self) -> Self {
             self.clone()
         }
-        $($(
-            #[inline]
-            $getter_vis
-            fn $field_name (self: &'_ Self)
-                -> Result<$field_user_ty>
-            {
-                self.$field_name.get1()
-            }
+        #[allow(dead_code)]
+        pub fn builder() -> Self {
+            Self::default()
+        }
+        $(
+            $(
+                #[inline]
+                #[allow(dead_code)]
+                #[allow(non_snake_case)]
+                $getter_vis
+                fn $field_name (self: &'_ Self)
+                    -> Result<$field_user_ty>
+                {
+                    self.$field_name.get1()
+                }
+                $(
+                  paste::paste! {
+                      #[inline]
+                      #[allow(dead_code)]
+                      #[allow(non_snake_case)]
+                      $setter_vis
+                      fn [<set_ $field_name>] (self: &'_ mut Self, value: $field_setter_user_ty) {
+                          self.$field_name.set1(value)
+                      }
+                      #[inline]
+                      #[allow(dead_code)]
+                      #[allow(non_snake_case)]
+                      $setter_vis
+                      fn [<with_ $field_name>]<'a>(self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
+                          let result = self;
+                          result.$field_name.set1(value);
+                          result
+                      }
+                  }
+                )?
+            )?
             $(
                 paste::paste! {
                 #[inline]
-                $setter_vis
-                fn [<set_ $field_name>] (self: &'_ mut Self, value: $field_setter_user_ty) {
-                    self.$field_name.set1(value)
+                #[allow(dead_code)]
+                #[allow(non_snake_case)]
+                pub(crate) fn [<serde_ $field_name>] (self: &'_ Self)
+                    -> Result<$serde_ty>
+                {
+                    self.$field_name.get1()
                 }
-
                 #[inline]
-                #[must_use]
-                $setter_vis
-                fn [<with_ $field_name>]<'a>(self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
+                #[allow(dead_code)]
+                #[allow(non_snake_case)]
+                pub(crate) fn [<serde_with_ $field_name>]<'a>(self: &mut Self, value: $serde_ty) -> &mut Self {
                     let result = self;
                     result.$field_name.set1(value);
                     result
+                }}
+            )?
+            $(
+                paste::paste! {
+                #[inline]
+                #[allow(dead_code)]
+                #[allow(non_snake_case)]
+                pub(crate) fn [<serde_ $field_name>] (self: &'_ Self)
+                    -> Result<$field_ty>
+                {
+                    self.$field_name.get1()
                 }
-            }
-        )?)?)*
+                #[inline]
+                #[allow(dead_code)]
+                #[allow(non_snake_case)]
+                pub(crate) fn [<serde_with_ $field_name>]<'a>(self: &mut Self, value: $field_ty) -> &mut Self {
+                    let result = self;
+                    result.$field_name = value.into();
+                    result
+                }}
+            )?
+        )*
     }
-
     // for serde
+    #[cfg(feature = "serde")]
     paste::paste!{
         #[doc(hidden)]
-        #[cfg(feature = "serde")]
-        #[derive(serde::Serialize, serde::Deserialize)]
+        #[allow(non_camel_case_types)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-        // Make it possible to just delegate serde entirely to
-        // this struct instead of $StructName
-        #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
         // Doing remoting automatically would make it impossible for the user to use another one.
         // Since the config format presumably needs to be
         // backward-compatible, that wouldn't be such a great idea.
-        //#[serde(remote = "" $StructName)]
+        #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
+        #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         pub(crate) struct [<Serde $StructName>] {
             $(
-                $($(
-                    pub $field_name: $field_setter_user_ty,
-                )?)?
+                $(pub $field_name: $field_ty,)?
+                $($(#[$serde_field_orig_meta])* pub $field_name: $serde_ty,)?
             )*
         }
     }

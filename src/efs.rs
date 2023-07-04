@@ -15,6 +15,7 @@ use crate::ondisk::{
 };
 use crate::types::Error;
 use crate::types::Result;
+
 #[cfg(feature = "std")]
 use amd_flash::ErasableRange;
 use amd_flash::{ErasableLocation, FlashRead, FlashWrite, Location};
@@ -697,29 +698,30 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         Ok(())
     }
 
-    pub fn spi_mode_bulldozer(&self) -> Result<EfhBulldozerSpiMode> {
+    pub fn spi_mode_bulldozer(&self) -> Result<Option<EfhBulldozerSpiMode>> {
         self.efh.spi_mode_bulldozer()
     }
-    pub fn set_spi_mode_bulldozer(&mut self, value: EfhBulldozerSpiMode) {
+
+    pub fn set_spi_mode_bulldozer(
+        &mut self,
+        value: Option<EfhBulldozerSpiMode>,
+    ) {
         self.efh.set_spi_mode_bulldozer(value)
-        // FIXME: write_efh ?
     }
-    pub fn spi_mode_zen_naples(&self) -> Result<EfhNaplesSpiMode> {
+    pub fn spi_mode_zen_naples(&self) -> Result<Option<EfhNaplesSpiMode>> {
         self.efh.spi_mode_zen_naples()
     }
 
-    pub fn set_spi_mode_zen_naples(&mut self, value: EfhNaplesSpiMode) {
+    pub fn set_spi_mode_zen_naples(&mut self, value: Option<EfhNaplesSpiMode>) {
         self.efh.set_spi_mode_zen_naples(value)
-        // FIXME: write_efh ?
     }
 
-    pub fn spi_mode_zen_rome(&self) -> Result<EfhRomeSpiMode> {
+    pub fn spi_mode_zen_rome(&self) -> Result<Option<EfhRomeSpiMode>> {
         self.efh.spi_mode_zen_rome()
     }
 
-    pub fn set_spi_mode_zen_rome(&mut self, value: EfhRomeSpiMode) {
+    pub fn set_spi_mode_zen_rome(&mut self, value: Option<EfhRomeSpiMode>) {
         self.efh.set_spi_mode_zen_rome(value)
-        // FIXME: write_efh ?
     }
 
     /// Note: BEGINNING, END are coordinates (in Byte).
@@ -934,5 +936,129 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             self.amd_physical_mode_mmio_size,
             entries,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EfhBulldozerSpiMode, EfhNaplesSpiMode, EfhRomeSpiMode};
+    use crate::ondisk::{
+        SpiFastSpeedNew, SpiNaplesMicronMode, SpiReadMode, SpiRomeMicronMode,
+    };
+    use crate::Efh;
+    use crate::Efs;
+    use crate::Error;
+    use amd_flash::{ErasableLocation, FlashAlign, FlashRead, FlashWrite};
+
+    struct Storage {}
+    impl FlashAlign for Storage {
+        fn erasable_block_size(&self) -> usize {
+            16
+        }
+    }
+    impl FlashRead for Storage {
+        fn read_exact(
+            &self,
+            _: u32,
+            _: &mut [u8],
+        ) -> core::result::Result<(), amd_flash::Error> {
+            todo!()
+        }
+    }
+    impl FlashWrite for Storage {
+        fn erase_block(
+            &self,
+            _: ErasableLocation,
+        ) -> core::result::Result<(), amd_flash::Error> {
+            todo!()
+        }
+        fn erase_and_write_block(
+            &self,
+            _: ErasableLocation,
+            _: &[u8],
+        ) -> core::result::Result<(), amd_flash::Error> {
+            todo!()
+        }
+    }
+
+    fn setup_efs_test(storage: &Storage) -> Efs<Storage> {
+        let efh_beginning = storage.erasable_location(0).unwrap();
+        Efs {
+            amd_physical_mode_mmio_size: None,
+            efh: Efh::default(),
+            efh_beginning,
+            storage: &storage,
+        }
+    }
+
+    #[test]
+    fn test_spi_mode_all_off() {
+        let storage = Storage {};
+        let mut setup = setup_efs_test(&storage);
+        assert!(setup.spi_mode_bulldozer().unwrap().is_none());
+        assert!(setup.spi_mode_zen_naples().unwrap().is_none());
+        assert!(setup.spi_mode_zen_rome().unwrap().is_none());
+        setup.set_spi_mode_bulldozer(None);
+        setup.set_spi_mode_zen_naples(None);
+        setup.set_spi_mode_zen_rome(None);
+        assert!(setup.spi_mode_bulldozer().unwrap().is_none());
+        assert!(setup.spi_mode_zen_naples().unwrap().is_none());
+        assert!(setup.spi_mode_zen_rome().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_spi_mode_bulldozer() -> Result<(), Error> {
+        let storage = Storage {};
+        let mut setup = setup_efs_test(&storage);
+        let spi_mode = EfhBulldozerSpiMode {
+            read_mode: SpiReadMode::Dual112,
+            fast_speed_new: SpiFastSpeedNew::_33_33MHz,
+        };
+        setup.set_spi_mode_bulldozer(Some(spi_mode));
+        assert!(
+            setup.spi_mode_bulldozer()?.unwrap().read_mode
+                == SpiReadMode::Dual112
+        );
+        assert!(setup.spi_mode_zen_naples()?.is_none());
+        assert!(setup.spi_mode_zen_rome()?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_spi_mode_zen_naples() -> Result<(), Error> {
+        let storage = Storage {};
+        let mut setup = setup_efs_test(&storage);
+        let spi_mode = EfhNaplesSpiMode {
+            read_mode: SpiReadMode::Dual112,
+            fast_speed_new: SpiFastSpeedNew::_33_33MHz,
+            micron_mode: SpiNaplesMicronMode::DummyCycle,
+        };
+        setup.set_spi_mode_zen_naples(Some(spi_mode));
+        assert!(setup.spi_mode_bulldozer()?.is_none());
+        assert!(
+            setup.spi_mode_zen_naples()?.unwrap().read_mode
+                == SpiReadMode::Dual112
+        );
+        assert!(setup.spi_mode_zen_rome()?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_spi_mode_zen_rome() -> Result<(), Error> {
+        let storage = Storage {};
+        let mut setup = setup_efs_test(&storage);
+        let spi_mode = EfhRomeSpiMode {
+            read_mode: SpiReadMode::Dual112,
+            fast_speed_new: SpiFastSpeedNew::_33_33MHz,
+            micron_mode: SpiRomeMicronMode::SupportMicron,
+        };
+        setup.set_spi_mode_zen_rome(Some(spi_mode));
+        assert!(setup.spi_mode_bulldozer()?.is_none());
+        assert!(setup.spi_mode_zen_naples()?.is_none());
+        assert!(
+            setup.spi_mode_zen_rome()?.unwrap().read_mode
+                == SpiReadMode::Dual112
+        );
+        Ok(())
     }
 }
