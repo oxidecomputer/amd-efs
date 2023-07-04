@@ -6,32 +6,30 @@
 #![cfg(feature = "serde")]
 
 use crate::ondisk::*;
-use crate::struct_accessors::DummyErrorChecks;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
 macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
 ) => (
     paste::paste!{
+        #[cfg(feature = "serde")]
         impl<'de> serde::de::Deserialize<'de> for $StructName {
             fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-                where D: serde::de::Deserializer<'de>,
-            {
+            where D: serde::de::Deserializer<'de>, {
                 let config = $SerdeStructName::deserialize(deserializer)?;
                 Ok($StructName::builder()
-                    $(
-                        .[<with_ $field_name>](config.$field_name.into())
-                    )*
-                    .build())
+                $(
+                .[<serde_with_ $field_name>](config.$field_name.into())
+                )*.build())
                 }
-            }
-            impl serde::Serialize for $StructName {
-                fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-                    where S: serde::Serializer,
-                {
-                    $SerdeStructName {
-                        $(
-                            $field_name: self.$field_name().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
-                        )*
+        }
+        #[cfg(feature = "serde")]
+        impl serde::Serialize for $StructName {
+            fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+            where S: serde::Serializer, {
+                $SerdeStructName {
+                    $(
+                        $field_name: self.[<serde_ $field_name>]().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
+                    )*
                 }.serialize(serializer)
             }
         }
@@ -51,58 +49,29 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
 )}
 
 make_serde!(
-    EfhBulldozerSpiMode,
-    SerdeEfhBulldozerSpiMode,
-    [read_mode, fast_speed_new]
-);
-make_serde!(
-    EfhNaplesSpiMode,
-    SerdeEfhNaplesSpiMode,
-    [read_mode, fast_speed_new, micron_mode]
-);
-make_serde!(
-    EfhRomeSpiMode,
-    SerdeEfhRomeSpiMode,
-    [read_mode, fast_speed_new, micron_mode]
-);
-make_serde!(
-    Efh,
-    SerdeEfh,
-    [
-        signature,
-        bhd_directory_table_milan,
-        xhci_fw_location,
-        gbe_fw_location,
-        imc_fw_location,
-        low_power_promontory_firmware_location,
-        promontory_firmware_location,
-        psp_directory_table_location_naples,
-        psp_directory_table_location_zen,
-        spi_mode_bulldozer,
-        spi_mode_zen_naples,
-        spi_mode_zen_rome
-    ]
-);
-
-make_serde!(
     DirectoryAdditionalInfo,
     SerdeDirectoryAdditionalInfo,
-    [base_address, address_mode, max_size]
+    [max_size, spi_block_size, base_address, address_mode, _reserved_0,]
 );
 make_serde!(
     PspSoftFuseChain,
     SerdePspSoftFuseChain,
     [
         secure_debug_unlock,
+        _reserved_0,
         early_secure_debug_unlock,
         unlock_token_in_nvram,
         force_security_policy_loading_even_if_insecure,
         load_diagnostic_bootloader,
         disable_psp_debug_prints,
+        _reserved_1,
         spi_decoding,
         postcode_decoding,
+        _reserved_2,
+        _reserved_3,
         skip_mp2_firmware_loading,
         postcode_output_control_1byte,
-        force_recovery_booting
+        force_recovery_booting,
+        _reserved_4,
     ]
 );

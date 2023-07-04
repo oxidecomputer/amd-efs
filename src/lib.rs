@@ -17,11 +17,3 @@ pub use crate::ondisk::ValueOrLocation;
 pub use ondisk::*;
 pub use types::Error;
 pub use types::Result;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}

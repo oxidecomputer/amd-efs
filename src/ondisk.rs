@@ -14,8 +14,10 @@ use modular_bitfield::prelude::*;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
 use strum_macros::EnumString;
 use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
+
 //use crate::configs;
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
@@ -72,7 +74,6 @@ pub enum SpiReadMode {
     #[cfg_attr(feature = "serde", serde(rename = "Normal up to 66.66 MHz"))]
     Normal66_66MHz = 0b110, // up to 66.66 MHz
     Fast = 0b111,
-    DoNothing = 0xff,
 }
 
 #[repr(u8)]
@@ -93,37 +94,66 @@ pub enum SpiFastSpeedNew {
     _100MHz = 0b100,
     #[cfg_attr(feature = "serde", serde(rename = "800 kHz"))]
     _800kHz = 0b101,
-    DoNothing = 0xff,
 }
 
-make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-    #[repr(C, packed)]
-    pub struct EfhBulldozerSpiMode {
-        read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
-        fast_speed_new: u8 : pub get SpiFastSpeedNew : pub set SpiFastSpeedNew,
-        _reserved: u8,
+impl Getter<Result<[u32; 2]>> for [LU32; 2] {
+    fn get1(self) -> Result<[u32; 2]> {
+        let a = self[0].get();
+        let b = self[1].get();
+        Ok([a, b])
     }
 }
 
-impl Default for EfhBulldozerSpiMode {
-    fn default() -> Self {
-        Self {
-            read_mode: 0xff,
-            fast_speed_new: 0xff,
-            _reserved: 0xff, // FIXME: check
-        }
+impl Setter<[u32; 2]> for [LU32; 2] {
+    fn set1(&mut self, value: [u32; 2]) {
+        self[0].set(value[0]);
+        self[1].set(value[1]);
     }
 }
 
-impl Getter<Result<EfhBulldozerSpiMode>> for EfhBulldozerSpiMode {
-    fn get1(self) -> Result<Self> {
+impl Getter<Result<[u32; 3]>> for [LU32; 3] {
+    fn get1(self) -> Result<[u32; 3]> {
+        let a = self[0].get();
+        let b = self[1].get();
+        let c = self[2].get();
+        Ok([a, b, c])
+    }
+}
+
+impl Setter<[u32; 3]> for [LU32; 3] {
+    fn set1(&mut self, value: [u32; 3]) {
+        self[0].set(value[0]);
+        self[1].set(value[1]);
+        self[2].set(value[2]);
+    }
+}
+
+impl Getter<Result<[u8; 3]>> for [u8; 3] {
+    fn get1(self) -> Result<[u8; 3]> {
         Ok(self)
     }
 }
 
-impl Setter<EfhBulldozerSpiMode> for EfhBulldozerSpiMode {
-    fn set1(&mut self, value: Self) {
+impl Getter<Result<[u8; 4]>> for [u8; 4] {
+    fn get1(self) -> Result<[u8; 4]> {
+        Ok(self)
+    }
+}
+
+impl Setter<[u8; 4]> for [u8; 4] {
+    fn set1(&mut self, value: [u8; 4]) {
+        *self = value
+    }
+}
+
+impl Getter<Result<[u8; 16]>> for [u8; 16] {
+    fn get1(self) -> Result<[u8; 16]> {
+        Ok(self)
+    }
+}
+
+impl Setter<[u8; 16]> for [u8; 16] {
+    fn set1(&mut self, value: [u8; 16]) {
         *self = value
     }
 }
@@ -135,47 +165,6 @@ impl Setter<EfhBulldozerSpiMode> for EfhBulldozerSpiMode {
 #[non_exhaustive]
 pub enum SpiNaplesMicronMode {
     DummyCycle = 0x0a,
-    DoNothing = 0xff,
-}
-
-make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-    #[repr(C, packed)]
-    pub struct EfhNaplesSpiMode {
-        read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
-        fast_speed_new: u8 : pub get SpiFastSpeedNew : pub set SpiFastSpeedNew,
-        micron_mode: u8 : pub get SpiNaplesMicronMode : pub set SpiNaplesMicronMode,
-    }
-}
-
-impl Default for EfhNaplesSpiMode {
-    fn default() -> Self {
-        Self { read_mode: 0xff, fast_speed_new: 0xff, micron_mode: 0xff }
-    }
-}
-
-impl Getter<Result<EfhNaplesSpiMode>> for EfhNaplesSpiMode {
-    fn get1(self) -> Result<Self> {
-        Ok(self)
-    }
-}
-
-impl Setter<EfhNaplesSpiMode> for EfhNaplesSpiMode {
-    fn set1(&mut self, value: EfhNaplesSpiMode) {
-        *self = value
-    }
-}
-
-impl Getter<Result<EfhRomeSpiMode>> for EfhRomeSpiMode {
-    fn get1(self) -> Result<Self> {
-        Ok(self)
-    }
-}
-
-impl Setter<EfhRomeSpiMode> for EfhRomeSpiMode {
-    fn set1(&mut self, value: EfhRomeSpiMode) {
-        *self = value
-    }
 }
 
 #[repr(u8)]
@@ -186,48 +175,31 @@ impl Setter<EfhRomeSpiMode> for EfhRomeSpiMode {
 pub enum SpiRomeMicronMode {
     SupportMicron = 0x55,
     ForceMicron = 0xaa,
-    DoNothing = 0xff,
 }
 
 make_accessors! {
     #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
     #[repr(C, packed)]
-    pub struct EfhRomeSpiMode {
-        read_mode: u8 : pub get SpiReadMode : pub set SpiReadMode,
-        fast_speed_new: u8 : pub get SpiFastSpeedNew : pub set SpiFastSpeedNew,
-        micron_mode: u8 : pub get SpiRomeMicronMode : pub set SpiRomeMicronMode,
-    }
-}
-
-impl Default for EfhRomeSpiMode {
-    fn default() -> Self {
-        Self { read_mode: 0xff, fast_speed_new: 0xff, micron_mode: 0x55 }
-    }
-}
-
-make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
-    #[repr(C, packed)]
-    pub struct Efh {
-        signature: LU32 : pub get u32 : pub set u32,                           // 0x55aa_55aa
-        imc_fw_location: LU32 : pub get u32 : pub set u32,                     // usually unused
-        gbe_fw_location: LU32 : pub get u32 : pub set u32,                     // usually unused
-        xhci_fw_location: LU32 : pub get u32 : pub set u32,                    // usually unused
-        psp_directory_table_location_naples: LU32 : pub get u32 : pub set u32, // usually unused
-        psp_directory_table_location_zen: LU32 : pub get u32 : pub set u32,
+    pub(crate) struct Efh {
+        signature || u32 : LU32 | pub get u32 : pub set u32,                           // 0x55aa_55aa
+        imc_fw_location || u32 : LU32 | pub get u32 : pub set u32,                     // usually unused
+        gbe_fw_location || u32 : LU32 | pub get u32 : pub set u32,                     // usually unused
+        xhci_fw_location || u32 : LU32 | pub get u32 : pub set u32,                    // usually unused
+        psp_directory_table_location_naples || u32 : LU32 | pub get u32 : pub set u32, // usually unused
+        psp_directory_table_location_zen || u32 : LU32 | pub get u32 : pub set u32,
         /// High nibble of model number is either 0 (Naples), 1 (Raven Ridge), or 3 (Rome).  Then, corresponding indices into BHD_DIRECTORY_TABLES are 0, 1, 2, respectively.  Newer models always use BHD_DIRECTORY_TABLE_MILAN instead.
-        pub bhd_directory_tables: [LU32; 3],
-        pub(crate) efs_generations: LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome; bit 1: Clear for Milan
-        bhd_directory_table_milan: LU32 : pub get u32 : pub set u32, // or Combo
-        _padding: LU32,
-        promontory_firmware_location: LU32 : pub get u32 : pub set u32,
-        pub low_power_promontory_firmware_location: LU32 : pub get u32 : pub set u32,
-        _padding2: [LU32; 2],                      // at offset 0x38
-        spi_mode_bulldozer: EfhBulldozerSpiMode : pub get EfhBulldozerSpiMode : pub set EfhBulldozerSpiMode,
-        spi_mode_zen_naples: EfhNaplesSpiMode : pub get EfhNaplesSpiMode : pub set EfhNaplesSpiMode, // and Raven Ridge
-        _reserved1: u8,
-        spi_mode_zen_rome: EfhRomeSpiMode : pub get EfhRomeSpiMode : pub set EfhRomeSpiMode,
-        _reserved2: u8,
+        pub bhd_directory_tables || [u32; 3] : [LU32; 3],
+        pub(crate) efs_generations || u32 : LU32, // bit 0: All pointers are Flash MMIO pointers; should be clear for Rome; bit 1: Clear for Milan
+        bhd_directory_table_milan || u32 : LU32 | pub get u32 : pub set u32, // or Combo
+        _padding || #[serde(default)] u32 : LU32,
+        promontory_firmware_location || u32 : LU32 | pub get u32 : pub set u32,
+        pub low_power_promontory_firmware_location || u32 : LU32 | pub get u32 : pub set u32,
+        _padding2 || #[serde(default)] [u32; 2] : [LU32; 2],                      // at offset 0x38
+        pub(crate) spi_mode_bulldozer : [u8; 3],
+        pub(crate) spi_mode_zen_naples : [u8; 3], // and Raven Ridge
+        _reserved1 || #[serde(default)] u8 : u8,
+        pub(crate) spi_mode_zen_rome : [u8; 3],
+        _reserved2 || #[serde(default)] u8 : u8,
     }
 }
 
@@ -247,10 +219,10 @@ impl Default for Efh {
             promontory_firmware_location: 0xffff_ffff.into(),
             low_power_promontory_firmware_location: 0xffff_ffff.into(),
             _padding2: [0xffff_ffff.into(); 2],
-            spi_mode_bulldozer: EfhBulldozerSpiMode::default(),
-            spi_mode_zen_naples: EfhNaplesSpiMode::default(),
+            spi_mode_bulldozer: [0xff, 0xff, 0xff],
+            spi_mode_zen_naples: [0xff, 0xff, 0xff],
             _reserved1: 0,
-            spi_mode_zen_rome: EfhRomeSpiMode::default(),
+            spi_mode_zen_rome: [0xff, 0xff, 0xff],
             _reserved2: 0,
         }
     }
@@ -283,6 +255,28 @@ pub enum ProcessorGeneration {
     Naples = -1,
     Rome = 0,
     Milan = 1,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct EfhBulldozerSpiMode {
+    pub read_mode: SpiReadMode,
+    pub fast_speed_new: SpiFastSpeedNew,
+}
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct EfhNaplesSpiMode {
+    pub read_mode: SpiReadMode,
+    pub fast_speed_new: SpiFastSpeedNew,
+    pub micron_mode: SpiNaplesMicronMode,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct EfhRomeSpiMode {
+    pub read_mode: SpiReadMode,
+    pub fast_speed_new: SpiFastSpeedNew,
+    pub micron_mode: SpiRomeMicronMode,
 }
 
 impl Efh {
@@ -381,6 +375,95 @@ impl Efh {
             }
         }
     }
+
+    pub fn spi_mode_bulldozer(&self) -> Result<Option<EfhBulldozerSpiMode>> {
+        if self.spi_mode_bulldozer == [0xff, 0xff, 0xff] {
+            Ok(None)
+        } else {
+            Ok(Some(EfhBulldozerSpiMode {
+                read_mode: SpiReadMode::from_u8(self.spi_mode_bulldozer[0])
+                    .ok_or(Error::Marshal)?,
+                fast_speed_new: SpiFastSpeedNew::from_u8(
+                    self.spi_mode_bulldozer[1],
+                )
+                .ok_or(Error::Marshal)?,
+            }))
+        }
+    }
+
+    pub fn set_spi_mode_bulldozer(
+        &mut self,
+        value: Option<EfhBulldozerSpiMode>,
+    ) {
+        self.spi_mode_bulldozer = match value {
+            None => [0xff, 0xff, 0xff],
+            Some(x) => [
+                x.read_mode.to_u8().unwrap(),
+                x.fast_speed_new.to_u8().unwrap(),
+                0xff,
+            ],
+        }
+    }
+
+    pub fn spi_mode_zen_naples(&self) -> Result<Option<EfhNaplesSpiMode>> {
+        if self.spi_mode_zen_naples == [0xff, 0xff, 0xff] {
+            Ok(None)
+        } else {
+            Ok(Some(EfhNaplesSpiMode {
+                read_mode: SpiReadMode::from_u8(self.spi_mode_zen_naples[0])
+                    .ok_or(Error::Marshal)?,
+                fast_speed_new: SpiFastSpeedNew::from_u8(
+                    self.spi_mode_zen_naples[1],
+                )
+                .ok_or(Error::Marshal)?,
+                micron_mode: SpiNaplesMicronMode::from_u8(
+                    self.spi_mode_zen_naples[2],
+                )
+                .ok_or(Error::Marshal)?,
+            }))
+        }
+    }
+
+    pub fn set_spi_mode_zen_naples(&mut self, value: Option<EfhNaplesSpiMode>) {
+        self.spi_mode_zen_naples = match value {
+            None => [0xff, 0xff, 0xff],
+            Some(x) => [
+                x.read_mode.to_u8().unwrap(),
+                x.fast_speed_new.to_u8().unwrap(),
+                x.micron_mode.to_u8().unwrap(),
+            ],
+        }
+    }
+
+    pub fn spi_mode_zen_rome(&self) -> Result<Option<EfhRomeSpiMode>> {
+        if self.spi_mode_zen_rome == [0xff, 0xff, 0xff] {
+            Ok(None)
+        } else {
+            Ok(Some(EfhRomeSpiMode {
+                read_mode: SpiReadMode::from_u8(self.spi_mode_zen_rome[0])
+                    .ok_or(Error::Marshal)?,
+                fast_speed_new: SpiFastSpeedNew::from_u8(
+                    self.spi_mode_zen_rome[1],
+                )
+                .ok_or(Error::Marshal)?,
+                micron_mode: SpiRomeMicronMode::from_u8(
+                    self.spi_mode_zen_rome[2],
+                )
+                .ok_or(Error::Marshal)?,
+            }))
+        }
+    }
+
+    pub fn set_spi_mode_zen_rome(&mut self, value: Option<EfhRomeSpiMode>) {
+        self.spi_mode_zen_rome = match value {
+            None => [0xff, 0xff, 0xff],
+            Some(x) => [
+                x.read_mode.to_u8().unwrap(),
+                x.fast_speed_new.to_u8().unwrap(),
+                x.micron_mode.to_u8().unwrap(),
+            ],
+        }
+    }
 }
 
 #[derive(
@@ -396,6 +479,12 @@ pub enum AddressMode {
     EfsRelativeOffset = 1,            // x
     DirectoryRelativeOffset = 2,      // (x - Base)
     OtherDirectoryRelativeOffset = 3, // (x - other.Base);
+}
+
+impl Default for AddressMode {
+    fn default() -> Self {
+        Self::EfsRelativeOffset
+    }
 }
 
 pub(crate) const WEAK_ADDRESS_MODE: AddressMode =
@@ -572,9 +661,7 @@ impl ValueOrLocation {
 
 /// XXX: If I move this to struct_accessors, it doesn't work anymore.
 
-/// Since modular_bitfield has a lot of the things already, provide a macro
-/// similar to make_accessors, but which doesn't generate any of the setters
-/// or getters.  Instead, it just defines the user-friendly "Serde"* struct.
+/// A variant of the make_accessors macro for modular_bitfields.
 macro_rules! make_bitfield_serde {(
     $(#[$struct_meta:meta])*
     $struct_vis:vis
@@ -582,7 +669,10 @@ macro_rules! make_bitfield_serde {(
         $(
             $(#[$field_meta:meta])*
             $field_vis:vis
-            $field_name:ident : $field_ty:ty $(: $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
+            $field_name:ident
+            $(|| $(#[$serde_field_orig_meta:meta])* $serde_ty:ty : $field_orig_ty:ty)?
+            $(: $field_ty:ty)?
+            $(| $getter_vis:vis get $field_user_ty:ty $(: $setter_vis:vis set $field_setter_user_ty:ty)?)?
         ),* $(,)?
     }
 ) => {
@@ -592,31 +682,66 @@ macro_rules! make_bitfield_serde {(
         $(
             $(#[$field_meta])*
             $field_vis
-            $field_name : $field_ty,
+            $($field_name : $field_ty,)?
+            $($field_name : $field_orig_ty,)?
         )*
     }
 
     impl $StructName {
         pub fn builder() -> Self {
-                Self::new()
+            Self::new() // NOT default
         }
         pub fn build(&self) -> Self {
-                self.clone()
+            self.clone()
         }
     }
 
+    #[cfg(feature = "serde")]
+    impl $StructName {
+        $(
+            paste::paste!{
+                $(
+                    #[allow(non_snake_case)]
+                    pub(crate) fn [<serde_ $field_name>] (self : &'_ Self)
+                        -> Result<$field_ty> {
+                        Ok(self.$field_name())
+                    }
+                )?
+                $(
+                    #[allow(non_snake_case)]
+                    pub(crate) fn [<serde_ $field_name>] (self : &'_ Self)
+                        -> Result<$serde_ty> {
+                        Ok(self.$field_name().into())
+                    }
+                )?
+                $(
+                    #[allow(non_snake_case)]
+                    pub(crate) fn [<serde_with_ $field_name>]<'a>(self : &mut Self, value: $field_ty) -> &mut Self {
+                        self.[<set_ $field_name>](value.into());
+                        self
+                    }
+                )?
+                $(
+                    #[allow(non_snake_case)]
+                    pub(crate) fn [<serde_with_ $field_name>]<'a>(self : &mut Self, value: $serde_ty) -> &mut Self {
+                        self.[<set_ $field_name>](value.into());
+                        self
+                    }
+                )?
+            }
+        )*
+    }
+
+    #[cfg(feature = "serde")]
     paste::paste! {
-        #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-        #[allow(dead_code)]
-        //#[serde(remote = "" $StructName)]
+        #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
         pub(crate) struct [<Serde $StructName>] {
             $(
-                $(
-                    $getter_vis
-                    //pub(crate)
-                    $field_name : <$field_ty as Specifier>::InOut, // $field_user_ty
-                )?
+                $(pub $field_name : <$field_ty as Specifier>::InOut,)?
+                $($(#[$serde_field_orig_meta])* pub $field_name : $serde_ty,)?
             )*
         }
     }
@@ -627,14 +752,14 @@ make_bitfield_serde! {
     #[repr(u32)]
     #[derive(Copy, Clone, Debug)]
     pub struct DirectoryAdditionalInfo {
-        pub max_size: B10 : pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs // TODO: Shrink setter.
+        pub max_size || u16 : B10 | pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs // TODO: Shrink setter.
         #[skip(getters, setters)]
-        spi_block_size: B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
-        pub base_address: B15 : pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where. // TODO: Shrink setter.
+        pub spi_block_size || u16 : B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
+        pub base_address || u16 : B15 | pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where. // TODO: Shrink setter.
         #[bits = 2]
-        pub address_mode: AddressMode : pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting // TODO: Shrink setter.
-        #[skip]
-        __: bool,
+        pub address_mode : AddressMode | pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting // TODO: Shrink setter.
+        #[allow(non_snake_case)]
+        _reserved_0 || #[serde(default)] bool : bool,
     }
 }
 
@@ -680,6 +805,11 @@ impl DirectoryAdditionalInfo {
         }
         *self = Self::from(mask);
         Ok(())
+    }
+    // This is for serde only--so if serde were disabled, we'd get a warning.
+    #[allow(dead_code)]
+    pub(crate) fn set_spi_block_size(&mut self, value: u16) {
+        self.set_spi_block_size_checked(value).unwrap() // FIXME error checking
     }
     /// Given a value, tries to convert it into UNIT without loss.  If that's not possible, returns None
     pub fn try_into_unit(value: usize) -> Option<u16> {
@@ -910,27 +1040,27 @@ make_bitfield_serde! {
     #[repr(u64)]
     #[derive(Copy, Clone, Debug)]
     pub struct PspSoftFuseChain {
-        pub secure_debug_unlock: bool : pub get bool : pub set bool,
-        #[skip]
-        __: bool,
-        pub early_secure_debug_unlock: bool : pub get bool : pub set bool,
-        pub unlock_token_in_nvram: bool : pub get bool : pub set bool, // if the unlock token has been stored (by us) into NVRAM
-        pub force_security_policy_loading_even_if_insecure: bool : pub get bool : pub set bool,
-        pub load_diagnostic_bootloader: bool : pub get bool : pub set bool,
-        pub disable_psp_debug_prints: bool : pub get bool : pub set bool,
-        #[skip]
-        __: B7,
-        pub spi_decoding: PspSoftFuseChain32MiBSpiDecoding : pub get PspSoftFuseChain32MiBSpiDecoding : pub set PspSoftFuseChain32MiBSpiDecoding,
-        pub postcode_decoding: PspSoftFuseChainPostCodeDecoding : pub get PspSoftFuseChainPostCodeDecoding : pub set PspSoftFuseChainPostCodeDecoding,
-        #[skip]
-        __: B12,
-        #[skip]
-        __: bool,
-        pub skip_mp2_firmware_loading: bool : pub get bool : pub set bool,
-        pub postcode_output_control_1byte: bool : pub get bool : pub set bool, // ???
-        pub force_recovery_booting: bool : pub get bool : pub set bool,
-        #[skip]
-        __: B32,
+        pub secure_debug_unlock || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(non_snake_case)]
+        _reserved_0 || #[serde(default)] bool : bool,
+        pub early_secure_debug_unlock || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub unlock_token_in_nvram || #[serde(default)] bool : bool | pub get bool : pub set bool, // if the unlock token has been stored (by us) into NVRAM
+        pub force_security_policy_loading_even_if_insecure || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub load_diagnostic_bootloader || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub disable_psp_debug_prints || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(non_snake_case)]
+        _reserved_1 || #[serde(default)] u8 : B7,
+        pub spi_decoding || PspSoftFuseChain32MiBSpiDecoding : PspSoftFuseChain32MiBSpiDecoding | pub get PspSoftFuseChain32MiBSpiDecoding : pub set PspSoftFuseChain32MiBSpiDecoding,
+        pub postcode_decoding || PspSoftFuseChainPostCodeDecoding : PspSoftFuseChainPostCodeDecoding | pub get PspSoftFuseChainPostCodeDecoding : pub set PspSoftFuseChainPostCodeDecoding,
+        #[allow(non_snake_case)]
+        _reserved_2 || #[serde(default)] u16 : B12,
+        #[allow(non_snake_case)]
+        _reserved_3 || #[serde(default)] bool : bool,
+        pub skip_mp2_firmware_loading || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub postcode_output_control_1byte || #[serde(default)] bool : bool | pub get bool : pub set bool, // ???
+        pub force_recovery_booting || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(non_snake_case)]
+        _reserved_4 || #[serde(default)] u32 : B32,
     }
 }
 
@@ -985,11 +1115,11 @@ make_bitfield_serde! {
     pub struct PspDirectoryEntryAttrs {
         #[bits = 8]
         #[allow(non_snake_case)]
-        pub type_: PspDirectoryEntryType : pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
-        pub sub_program: B8 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
-        pub rom_id: PspDirectoryRomId : pub get PspDirectoryRomId : pub set PspDirectoryRomId,
-        #[skip]
-        __: B14,
+        pub type_: PspDirectoryEntryType | pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
+        pub sub_program || u8 : B8 | pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
+        pub rom_id: PspDirectoryRomId | pub get PspDirectoryRomId : pub set PspDirectoryRomId,
+        #[allow(non_snake_case)]
+        _reserved_0 || #[serde(default)] u16 : B14,
     }
 }
 
@@ -997,9 +1127,12 @@ make_accessors! {
     #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
     #[repr(C, packed)]
     pub struct PspDirectoryEntry {
-        pub(crate) attrs: LU32,
-        pub(crate) internal_size: LU32,
-        pub(crate) internal_source: LU64, // Note: value iff size == 0; otherwise location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+        pub(crate) attrs || u32 : LU32,
+        pub(crate) internal_size || u32 : LU32,
+        // Note: value iff size == 0; otherwise location
+        // Note: (iff directory.address_mode == 2)
+        //   entry address mode (top 2 bits), or 0
+        pub(crate) internal_source || u64 : LU64,
     }
 }
 
@@ -1318,28 +1451,34 @@ make_bitfield_serde! {
     pub struct BhdDirectoryEntryAttrs {
         #[bits = 8]
         #[allow(non_snake_case)]
-        pub type_: BhdDirectoryEntryType : pub get BhdDirectoryEntryType : pub set BhdDirectoryEntryType,
+        pub type_: BhdDirectoryEntryType | pub get BhdDirectoryEntryType : pub set BhdDirectoryEntryType,
         #[bits = 8]
-        pub region_type: BhdDirectoryEntryRegionType : pub get BhdDirectoryEntryRegionType : pub set BhdDirectoryEntryRegionType,
-        pub reset_image: bool : pub get bool : pub set bool,
-        pub copy_image: bool : pub get bool : pub set bool,
-        pub read_only: bool : pub get bool : pub set bool, // only useful for region_type > 0
-        pub compressed: bool : pub get bool : pub set bool,
-        pub instance: B4 : pub get u8 : pub set u8, // TODO: Shrink setter.
-        pub sub_program: B3 : pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types PMU firmware and APCB binaries // TODO: Shrink setter.
-        pub rom_id: BhdDirectoryRomId : pub get BhdDirectoryRomId : pub set BhdDirectoryRomId,
-        #[skip]
-        __: B3,
+        pub region_type: BhdDirectoryEntryRegionType | pub get BhdDirectoryEntryRegionType : pub set BhdDirectoryEntryRegionType,
+        pub reset_image || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub copy_image: bool | pub get bool : pub set bool,
+        /// This field is only useful for
+        /// region_type != BhdDirectoryEntryRegionType::Normal.
+        pub read_only || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub compressed || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        pub instance || u8 : B4 | pub get u8 : pub set u8, // TODO: Shrink setter.
+        // TODO: Shrink setter once possible (currently the libraries we use
+        // to implement bitfields can't do that).
+        /// A function of AMD Family and Model; only useful for types PMU
+        /// firmware and APCB binaries.
+        pub sub_program || #[serde(default)] u8 : B3 | pub get u8 : pub set u8,
+        pub rom_id || #[serde(default)] BhdDirectoryRomId : BhdDirectoryRomId | pub get BhdDirectoryRomId : pub set BhdDirectoryRomId,
+        #[allow(non_snake_case)]
+        _reserved_0 || #[serde(default)] u8 : B3,
     }
 }
 make_accessors! {
     #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
     #[repr(C, packed)]
     pub struct BhdDirectoryEntry {
-        attrs: LU32,
-        pub(crate) internal_size: LU32,   // 0xFFFF_FFFF for value entry
-        pub(crate) internal_source: LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
-        pub(crate) internal_destination_location: LU64, // 0xffff_ffff_ffff_ffff: none
+        attrs || u32 : LU32,
+        pub(crate) internal_size || u32 : LU32,   // 0xFFFF_FFFF for value entry
+        pub(crate) internal_source || u64 : LU64, // value (or nothing) iff size == 0; otherwise source_location; TODO: (iff directory.address_mode == 2) entry address mode (top 2 bits), or 0
+        pub(crate) internal_destination_location || u64 : LU64, // 0xffff_ffff_ffff_ffff: none
     }
 }
 
@@ -1536,10 +1675,10 @@ make_accessors! {
     #[repr(C, packed)]
     pub struct ComboDirectoryHeader {
         pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"
-        pub(crate) checksum: LU32, // 32-bit CRC value of header below this field and including all entries
-        pub(crate) total_entries: LU32,
-        pub(crate) lookup_mode: LU32 : pub get ComboDirectoryLookupMode : pub set ComboDirectoryLookupMode,
-        _reserved: [u8; 16], // 0
+        pub(crate) checksum || u32 : LU32, // 32-bit CRC value of header below this field and including all entries
+        pub(crate) total_entries || u32 : LU32,
+        pub(crate) lookup_mode || u32 : LU32 | pub get ComboDirectoryLookupMode : pub set ComboDirectoryLookupMode,
+        pub(crate) _reserved || #[cfg_attr(feature = "serde", serde(default))] [u8; 16] : [u8; 16], // 0
     }
 }
 
@@ -1712,9 +1851,6 @@ mod tests {
 
     #[test]
     fn test_struct_sizes() {
-        assert!(size_of::<EfhBulldozerSpiMode>() == 3);
-        assert!(size_of::<EfhNaplesSpiMode>() == 3);
-        assert!(size_of::<EfhRomeSpiMode>() == 3);
         assert!(size_of::<Efh>() < 0x100);
         assert!(size_of::<PspDirectoryHeader>() == 16);
         assert!(size_of::<PspDirectoryEntry>() == 16);
