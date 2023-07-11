@@ -225,6 +225,7 @@ make_accessors! {
         _padding2: [LU32; 2],                      // at offset 0x38
         spi_mode_bulldozer: EfhBulldozerSpiMode : pub get EfhBulldozerSpiMode : pub set EfhBulldozerSpiMode,
         spi_mode_zen_naples: EfhNaplesSpiMode : pub get EfhNaplesSpiMode : pub set EfhNaplesSpiMode, // and Raven Ridge
+        _reserved1: u8,
         spi_mode_zen_rome: EfhRomeSpiMode : pub get EfhRomeSpiMode : pub set EfhRomeSpiMode,
         _reserved2: u8,
     }
@@ -248,10 +249,22 @@ impl Default for Efh {
             _padding2: [0xffff_ffff.into(); 2],
             spi_mode_bulldozer: EfhBulldozerSpiMode::default(),
             spi_mode_zen_naples: EfhNaplesSpiMode::default(),
+            _reserved1: 0,
             spi_mode_zen_rome: EfhRomeSpiMode::default(),
             _reserved2: 0,
         }
     }
+}
+
+#[cfg(test)]
+#[test]
+fn test_spi_mode_offsets() {
+    use memoffset::offset_of;
+    assert!(offset_of!(Efh, psp_directory_table_location_naples) == 0x10);
+    assert!(offset_of!(Efh, psp_directory_table_location_zen) == 0x14);
+    assert!(offset_of!(Efh, spi_mode_bulldozer) == 0x40);
+    assert!(offset_of!(Efh, spi_mode_zen_naples) == 0x43);
+    assert!(offset_of!(Efh, spi_mode_zen_rome) == 0x47);
 }
 
 #[repr(i8)]

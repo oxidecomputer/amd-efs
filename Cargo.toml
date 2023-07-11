@@ -1,6 +1,6 @@
 [package]
 name = "amd-efs"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Oxide Computer Company"]
 edition = "2018"
 
@@ -27,6 +27,7 @@ strum = { version = "0.23", default-features = false, features = [] }
 strum_macros = { version = "0.23.1" }
 zerocopy = "0.6"
 thiserror = { version = "1.0.38", optional = true }
+memoffset = "0.5"
 
 [features]
 default = []
