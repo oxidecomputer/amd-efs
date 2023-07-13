@@ -777,7 +777,16 @@ impl core::fmt::Debug for PspDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(
+    Debug,
+    PartialEq,
+    FromPrimitive,
+    Clone,
+    Copy,
+    BitfieldSpecifier,
+    EnumString,
+    strum_macros::Display,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[bits = 8]
@@ -1248,7 +1257,16 @@ impl core::fmt::Debug for BhdDirectoryHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(
+    Debug,
+    PartialEq,
+    FromPrimitive,
+    Clone,
+    Copy,
+    BitfieldSpecifier,
+    EnumString,
+    strum_macros::Display,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[bits = 8]
