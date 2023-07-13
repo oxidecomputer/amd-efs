@@ -368,6 +368,13 @@ pub struct Efs<'a, T: FlashRead + FlashWrite> {
 }
 
 impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
+    pub fn compatible_with_processor_generation(
+        &self,
+        processor_generation: ProcessorGeneration,
+    ) -> bool {
+        self.efh.compatible_with_processor_generation(processor_generation)
+    }
+
     // FIXME maybe not public
     pub fn erasable_location(
         &self,
