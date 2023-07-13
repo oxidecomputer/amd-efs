@@ -1,6 +1,6 @@
 [package]
 name = "amd-efs"
-version = "0.2.6"
+version = "0.2.7"
 authors = ["Oxide Computer Company"]
 edition = "2018"
 
