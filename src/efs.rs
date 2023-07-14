@@ -363,7 +363,7 @@ pub const fn preferred_efh_location(
 pub struct Efs<'a, T: FlashRead + FlashWrite> {
     storage: &'a T,
     efh_beginning: ErasableLocation,
-    pub efh: Efh,
+    efh: Efh,
     amd_physical_mode_mmio_size: Option<u32>,
 }
 
