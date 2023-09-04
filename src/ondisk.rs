@@ -259,12 +259,14 @@ pub enum ProcessorGeneration {
 
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Clone)]
 pub struct EfhBulldozerSpiMode {
     pub read_mode: SpiReadMode,
     pub fast_speed_new: SpiFastSpeedNew,
 }
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Clone)]
 pub struct EfhNaplesSpiMode {
     pub read_mode: SpiReadMode,
     pub fast_speed_new: SpiFastSpeedNew,
@@ -273,6 +275,7 @@ pub struct EfhNaplesSpiMode {
 
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Clone)]
 pub struct EfhRomeSpiMode {
     pub read_mode: SpiReadMode,
     pub fast_speed_new: SpiFastSpeedNew,
