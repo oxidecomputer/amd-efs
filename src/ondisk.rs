@@ -239,11 +239,10 @@ fn test_spi_mode_offsets() {
     assert!(offset_of!(Efh, spi_mode_zen_rome) == 0x47);
 }
 
-#[repr(i8)]
+//#[repr(i8)]
 #[derive(
     Debug,
     PartialEq,
-    FromPrimitive,
     Clone,
     Copy,
     EnumString,
@@ -252,6 +251,7 @@ fn test_spi_mode_offsets() {
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ProcessorGeneration {
+    Turin = -2,
     Naples = -1,
     Rome = 0,
     Milan = 1,
@@ -355,10 +355,11 @@ impl Efh {
                 // Rome didn't have generation flags yet, so make sure none of them are cleared.
                 self.efs_generations.get() == 0xffff_fffe
             }
-            generation => {
-                let generation: u8 = generation as u8;
-                assert!(generation < 16);
-                self.efs_generations.get() & (1 << generation) == 0
+            ProcessorGeneration::Turin => {
+                self.efs_generations.get() == 0xffff_ffe3
+            }
+            ProcessorGeneration::Milan => {
+                self.efs_generations.get() == 0xffff_fffc
             }
         }
     }
@@ -371,11 +372,8 @@ impl Efh {
             ProcessorGeneration::Naples => 0xffff_ffff,
             // Rome didn't have generation flags yet, so make sure to clear none of them.
             ProcessorGeneration::Rome => 0xffff_fffe,
-            generation => {
-                let generation: u8 = generation as u8;
-                assert!(generation < 16);
-                0xffff_fffe & !(1 << generation)
-            }
+            ProcessorGeneration::Turin => 0xffff_ffe3, // 0b1...00011
+            ProcessorGeneration::Milan => 0xffff_fffc,
         }
     }
 
@@ -938,6 +936,12 @@ pub enum PspDirectoryEntryType {
     PspTrustletPublicKey = 0x0D,
     SmuOffChipFirmware12 = 0x12,
     PspEarlySecureUnlockDebugImage = 0x13,
+    Fifteen = 0x15,
+    OneA = 0x1a,
+    TeeBootDriver = 0x1b,
+    TeeSocDriver = 0x1c,
+    TeeDebugDriver = 0x1d,
+    TeeInterfaceDriver = 0x1f,
     DiscoveryBinary = 0x20,
     WrappedIkek = 0x21,
     PspTokenUnlockData = 0x22,
@@ -1001,6 +1005,13 @@ pub enum PspDirectoryEntryType {
     DmcuIsr = 0x59,
     Msmu0 = 0x5A,
     Msmu1 = 0x5B,
+    MpioOffchipFirmware = 0x5D,
+    RasDriver = 0x64,
+    RasTrustedApplication = 0x65,
+    TeeFhpDriver = 0x67,
+    TeeSpdmDriver = 0x68,
+    PspStage2Bootloader = 0x73,
+    RegisterInitializationBinary = 0x76,
     OemSysTa = 0x80,
     OemSysTaPublicKey = 0x81,
     OemIkek = 0x82,
@@ -1011,6 +1022,12 @@ pub enum PspDirectoryEntryType {
     MpmFactoryProvisioningData = 0x87,
     MpmWlanFirmware = 0x88,
     MpmSecurityDriver = 0x89,
+    MpdmaTigerfishFirmware = 0x8C,
+    Gmi3PhyFirmware = 0x91,
+    MpdmaPageMigrationFirmware = 0x92,
+    AspSramFirmwareExtension = 0x9D,
+    RegisterAccessWhitelist = 0x9F,
+    S3Image = 0xA0,
 }
 
 impl DummyErrorChecks for PspDirectoryEntryType {}
@@ -1121,8 +1138,9 @@ make_bitfield_serde! {
         pub type_: PspDirectoryEntryType | pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
         pub sub_program || u8 : B8 | pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
         pub rom_id: PspDirectoryRomId | pub get PspDirectoryRomId : pub set PspDirectoryRomId,
-        #[allow(non_snake_case)]
-        _reserved_0 || #[serde(default)] u16 : B14,
+        pub writable: bool | pub get bool : pub set bool,
+        pub instance || u8 : B4 | pub get u8 : pub set u8,
+        _reserved_0 || #[serde(default)] u16 : B9,
     }
 }
 
@@ -1228,6 +1246,7 @@ impl PspDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     make_attr_proxy_with_fallible_getter!(typ, type_, PspDirectoryEntryType);
     make_attr_proxy!(sub_program, sub_program, u8);
+    make_attr_proxy!(instance, instance, u8);
     make_attr_proxy_with_fallible_getter!(rom_id, rom_id, PspDirectoryRomId);
     pub fn new() -> Self {
         Self::default()

@@ -356,6 +356,7 @@ pub const fn preferred_efh_location(
     processor_generation: ProcessorGeneration,
 ) -> Location {
     match processor_generation {
+        ProcessorGeneration::Turin => 0x2_0000, // FIXME
         ProcessorGeneration::Naples => 0x2_0000,
         ProcessorGeneration::Rome | ProcessorGeneration::Milan => 0xFA_0000,
     }
@@ -601,6 +602,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         let efh = &self.efh;
         let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
         let positions = match processor_generation {
+            Some(ProcessorGeneration::Turin) => {
+                [efh.bhd_directory_table_milan().ok(), None, None, None] // FIXME test
+            }
             Some(ProcessorGeneration::Milan) => {
                 [efh.bhd_directory_table_milan().ok(), None, None, None]
             }
