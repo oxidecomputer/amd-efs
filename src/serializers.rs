@@ -6,7 +6,7 @@
 #![cfg(feature = "serde")]
 
 use crate::ondisk::*;
-use quote::quote;
+//use quote::quote;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
 macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
@@ -27,14 +27,33 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
         impl serde::Serialize for $StructName {
             fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
             where S: serde::Serializer, {
-                $SerdeStructName {
-                    $(
-                        $field_name: self.[<serde_ $field_name>]()
-                            .map_err(|_| serde::ser::Error::custom(format!("textual representation of value {:?} for field {:?}.{:?} unknown",
-                                self.[<$field_name>](), quote!($StructName), quote!($field_name))))?
-                            .into(),
-                    )*
-                }.serialize(serializer)
+                // TODO skip_serializing_if="has_error" on a regular struct with the Results in there. But how to then flatten the Ok case?
+                // Also, how to have that depend on a flag like human_readable or some other flag?
+                use serde::ser::SerializeStruct;
+                let count = [$(stringify!($field_name),)*].len();
+                let human_readable = serializer.is_human_readable();
+                let mut state = serializer.serialize_struct(stringify!($StructName), count)?; // FIXME use serde renamed name, or schema_name if schemars
+                $(
+                    match self.[<serde_ $field_name>]() {
+                        Ok(x) => {
+                            state.serialize_field(stringify!($field_name), &x)?; // FIXME use serde renamed field name; but that's on the $Serde struct that we aren't using
+                        },
+                        Err(e) => {
+                            let e = format!("textual representation of value for field '{}.{}' unknown: {}",
+                                stringify!($StructName), stringify!($field_name), e);
+                            // XXX: Proxy for "wants to have errors ignored"
+                            if human_readable {
+                                // Better to leave the field off entirely for clarity.
+                                //state.serialize_field(stringify!($field_name), &e)?;
+                                eprintln!("error: {}", e);
+                                //std::os::set_exit_status(exitcode::DATAERR);
+                            } else {
+                                return Err(serde::ser::Error::custom(e))
+                            }
+                        }
+                    }
+                )*
+                state.end()
             }
         }
         #[cfg(feature = "schemars")]
