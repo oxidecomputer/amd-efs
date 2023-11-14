@@ -28,6 +28,7 @@ strum_macros = { version = "0.23.1" }
 zerocopy = "0.6"
 thiserror = { version = "1.0.38", optional = true }
 memoffset = "0.5"
+quote = { version = "1.0.33", default-features = false, features = [] }
 
 [features]
 default = []

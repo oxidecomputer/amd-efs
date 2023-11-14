@@ -6,6 +6,7 @@
 #![cfg(feature = "serde")]
 
 use crate::ondisk::*;
+use quote::quote;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
 macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
@@ -28,7 +29,10 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
             where S: serde::Serializer, {
                 $SerdeStructName {
                     $(
-                        $field_name: self.[<serde_ $field_name>]().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
+                        $field_name: self.[<serde_ $field_name>]()
+                            .map_err(|_| serde::ser::Error::custom(format!("textual representation of value {:?} for field {:?}.{:?} unknown",
+                                self.[<$field_name>](), quote!($StructName), quote!($field_name))))?
+                            .into(),
                     )*
                 }.serialize(serializer)
             }
