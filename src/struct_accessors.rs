@@ -316,17 +316,15 @@ macro_rules! make_accessors {(
     paste::paste!{
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-        #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-        // Doing remoting automatically would make it impossible for the user to use another one.
-        // Since the config format presumably needs to be
-        // backward-compatible, that wouldn't be such a great idea.
+        #[cfg_attr(feature = "serde", derive(serde::Serialize))]
+        //#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
         #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
-        #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
-        pub(crate) struct [<Serde $StructName>] {
+        //#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+        // Rust's serde automatically has Options transparent--but not Results.
+        pub(crate) struct [<SerdePermissiveSerializing $StructName>] {
             $(
-                $(pub $field_name: $field_ty,)?
-                $($(#[$serde_field_orig_meta])* pub $field_name: $serde_ty,)?
+                $(#[serde(skip_serializing_if="Option::is_none")] pub $field_name: Option<$field_ty>,)?
+                $(#[serde(skip_serializing_if="Option::is_none")] $(#[$serde_field_orig_meta])* pub $field_name: Option<$serde_ty>,)?
             )*
         }
     }

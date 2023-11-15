@@ -737,7 +737,7 @@ macro_rules! make_bitfield_serde {(
 
     #[cfg(feature = "serde")]
     paste::paste! {
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
         #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
         #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
@@ -745,6 +745,23 @@ macro_rules! make_bitfield_serde {(
             $(
                 $(pub $field_name : <$field_ty as Specifier>::InOut,)?
                 $($(#[$serde_field_orig_meta])* pub $field_name : $serde_ty,)?
+            )*
+        }
+    }
+
+    // for serde
+    #[cfg(feature = "serde")]
+    paste::paste!{
+        #[doc(hidden)]
+        #[allow(non_camel_case_types)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize))]
+        //#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+        #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
+        //#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+        pub(crate) struct [<SerdePermissiveSerializing $StructName>] {
+            $(
+                $(#[serde(skip_serializing_if="Option::is_none")] pub $field_name: Option<$field_ty>,)?
+                $(#[serde(skip_serializing_if="Option::is_none")] $(#[$serde_field_orig_meta])* pub $field_name: Option<$serde_ty>,)?
             )*
         }
     }
