@@ -311,9 +311,13 @@ macro_rules! make_accessors {(
             )?
         )*
     }
-    // for serde
     #[cfg(feature = "serde")]
     paste::paste!{
+        /// Use this for serialization in order to make serde skip those fields
+        /// where the meaning of a raw value is unknown to us.
+        ///
+        /// Caller can then override Serializer::skip_field and thus find out
+        /// which fields were skipped, inferring where errors were.
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -321,6 +325,9 @@ macro_rules! make_accessors {(
         #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
         //#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         // Rust's serde automatically has Options transparent--but not Results.
+        // See also <https://github.com/serde-rs/serde/issues/1042> for
+        // limitations (that don't hit us since our zerocopy structs
+        // can't have Option<Option<T>> anyway).
         pub(crate) struct [<SerdePermissiveSerializing $StructName>] {
             $(
                 $(#[serde(skip_serializing_if="Option::is_none")] pub $field_name: Option<$field_ty>,)?

@@ -749,15 +749,17 @@ macro_rules! make_bitfield_serde {(
         }
     }
 
-    // for serde
     #[cfg(feature = "serde")]
     paste::paste!{
+        /// Use this for serialization in order to make serde skip those fields
+        /// where the meaning of a raw value is unknown to us.
+        ///
+        /// Caller can then override Serializer::skip_field and thus find out
+        /// which fields were skipped, inferring where errors were.
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize))]
-        //#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
         #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
-        //#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         pub(crate) struct [<SerdePermissiveSerializing $StructName>] {
             $(
                 $(#[serde(skip_serializing_if="Option::is_none")] pub $field_name: Option<$field_ty>,)?
