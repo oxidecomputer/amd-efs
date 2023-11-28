@@ -321,17 +321,18 @@ macro_rules! make_accessors {(
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize))]
-        //#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
         #[cfg_attr(feature = "serde", serde(rename = "" $StructName))]
-        //#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         // Rust's serde automatically has Options transparent--but not Results.
         // See also <https://github.com/serde-rs/serde/issues/1042> for
         // limitations (that don't hit us since our zerocopy structs
         // can't have Option<Option<T>> anyway).
         pub(crate) struct [<SerdePermissiveSerializing $StructName>] {
             $(
-                $(#[serde(skip_serializing_if="Option::is_none")] pub $field_name: Option<$field_ty>,)?
-                $(#[serde(skip_serializing_if="Option::is_none")] $(#[$serde_field_orig_meta])* pub $field_name: Option<$serde_ty>,)?
+                $(#[serde(skip_serializing_if="Option::is_none")]
+                pub $field_name: Option<$field_ty>,)?
+                $(#[serde(skip_serializing_if="Option::is_none")]
+                $(#[$serde_field_orig_meta])*
+                pub $field_name: Option<$serde_ty>,)?
             )*
         }
     }

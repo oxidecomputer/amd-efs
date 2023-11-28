@@ -28,7 +28,7 @@ macro_rules! impl_struct_serde_conversion{($StructName:ident, $SerdeStructName:i
             where S: serde::Serializer, {
                 $SerializingStructName {
                     $(
-                        $field_name: self.[<serde_ $field_name>]().map_err(|_| format!("value unknown field '{}.{}'", stringify!($SerdeStructName), stringify!($field_name))).ok(),
+                        $field_name: self.[<serde_ $field_name>]().ok(),
                     )*
                 }.serialize(serializer)
             }
