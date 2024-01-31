@@ -240,21 +240,15 @@ fn test_spi_mode_offsets() {
 }
 
 //#[repr(i8)]
-#[derive(
-    Debug,
-    PartialEq,
-    Clone,
-    Copy,
-    EnumString,
-    strum_macros::EnumIter,
-)]
+#[derive(Debug, PartialEq, Clone, Copy, EnumString, strum_macros::EnumIter)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ProcessorGeneration {
-    Turin = -2,
-    Naples = -1,
-    Rome = 0,
-    Milan = 1,
+    Naples,
+    Rome,
+    Milan,
+    Genoa,
+    Turin,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -299,6 +293,7 @@ impl Efh {
     /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
     /// Old (pre-Rome) boards had MMIO addresses instead of offsets in the slots.  Find out whether that's the case.
     pub fn physical_address_mode(&self) -> bool {
+        // XXX: Family 1Ah Models 00h–0Fh and 10h–1Fh does not clear bit 0 but expects offsets.
         !self.second_gen_efs()
     }
 
@@ -353,13 +348,15 @@ impl Efh {
             }
             ProcessorGeneration::Rome => {
                 // Rome didn't have generation flags yet, so make sure none of them are cleared.
+                // Bit 0 should be cleared (i.e. this is a second-gen EFS).
                 self.efs_generations.get() == 0xffff_fffe
             }
-            ProcessorGeneration::Turin => {
-                self.efs_generations.get() == 0xffff_ffe3
+            ProcessorGeneration::Milan | ProcessorGeneration::Genoa => {
+                (self.efs_generations.get() & (1 << 0b0000)) == 0
             }
-            ProcessorGeneration::Milan => {
-                self.efs_generations.get() == 0xffff_fffc
+            ProcessorGeneration::Turin => {
+                // XXX: Is Turin Model 00h-0Fh or 10h-1Fh? If the former, should be 0b0010 instead.
+                (self.efs_generations.get() & (1 << 0b0011)) == 0
             }
         }
     }
@@ -372,8 +369,9 @@ impl Efh {
             ProcessorGeneration::Naples => 0xffff_ffff,
             // Rome didn't have generation flags yet, so make sure to clear none of them.
             ProcessorGeneration::Rome => 0xffff_fffe,
-            ProcessorGeneration::Turin => 0xffff_ffe3, // 0b1...00011
             ProcessorGeneration::Milan => 0xffff_fffc,
+            ProcessorGeneration::Genoa => 0xffff_fffe,
+            ProcessorGeneration::Turin => 0xffff_ffe3, // 0b1...00011
         }
     }
 
@@ -407,7 +405,10 @@ impl Efh {
     }
 
     pub fn spi_mode_zen_naples(&self) -> Result<Option<EfhNaplesSpiMode>> {
-        if self.spi_mode_zen_naples == [0xff, 0xff, 0xff] {
+        if !self
+            .compatible_with_processor_generation(ProcessorGeneration::Naples)
+            || self.spi_mode_zen_naples == [0xff, 0xff, 0xff]
+        {
             Ok(None)
         } else {
             Ok(Some(EfhNaplesSpiMode {
@@ -437,7 +438,9 @@ impl Efh {
     }
 
     pub fn spi_mode_zen_rome(&self) -> Result<Option<EfhRomeSpiMode>> {
-        if self.spi_mode_zen_rome == [0xff, 0xff, 0xff] {
+        if !self.compatible_with_processor_generation(ProcessorGeneration::Rome)
+            || self.spi_mode_zen_rome == [0xff, 0xff, 0xff]
+        {
             Ok(None)
         } else {
             Ok(Some(EfhRomeSpiMode {

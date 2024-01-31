@@ -356,9 +356,9 @@ pub const fn preferred_efh_location(
     processor_generation: ProcessorGeneration,
 ) -> Location {
     match processor_generation {
-        ProcessorGeneration::Turin => 0x2_0000, // FIXME
         ProcessorGeneration::Naples => 0x2_0000,
         ProcessorGeneration::Rome | ProcessorGeneration::Milan => 0xFA_0000,
+        ProcessorGeneration::Genoa | ProcessorGeneration::Turin => 0x2_0000,
     }
 }
 
@@ -397,7 +397,16 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         storage: &T,
         processor_generation: Option<ProcessorGeneration>,
     ) -> Result<ErasableLocation> {
-        for position in EFH_POSITION.iter() {
+        let positions;
+        if let Some(ProcessorGeneration::Genoa | ProcessorGeneration::Turin) =
+            processor_generation
+        {
+            // Starting with Genoa, only one EFS offset is allowed.
+            positions = [0x2_0000].as_slice();
+        } else {
+            positions = EFH_POSITION.as_slice();
+        }
+        for position in positions.iter() {
             let mut xbuf: [u8; size_of::<Efh>()] = [0; size_of::<Efh>()];
             storage.read_exact(*position, &mut xbuf)?;
             if let Some(item) = header_from_collection::<Efh>(&xbuf[..]) {
@@ -416,7 +425,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             }
         }
         // Old firmware header is better than no firmware header; TODO: Warn.
-        for position in EFH_POSITION.iter() {
+        for position in positions.iter() {
             let mut xbuf: [u8; size_of::<Efh>()] = [0; size_of::<Efh>()];
             storage.read_exact(*position, &mut xbuf)?;
             if let Some(item) = header_from_collection::<Efh>(&xbuf[..]) {
@@ -602,7 +611,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         let efh = &self.efh;
         let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
         let positions = match processor_generation {
-            Some(ProcessorGeneration::Turin) => {
+            Some(ProcessorGeneration::Genoa | ProcessorGeneration::Turin) => {
                 [efh.bhd_directory_table_milan().ok(), None, None, None] // FIXME test
             }
             Some(ProcessorGeneration::Milan) => {
