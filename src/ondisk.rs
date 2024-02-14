@@ -1143,6 +1143,7 @@ make_bitfield_serde! {
         pub rom_id: PspDirectoryRomId | pub get PspDirectoryRomId : pub set PspDirectoryRomId,
         pub writable: bool | pub get bool : pub set bool,
         pub instance || u8 : B4 | pub get u8 : pub set u8,
+        #[allow(non_snake_case)]
         _reserved_0 || #[serde(default)] u16 : B9,
     }
 }
