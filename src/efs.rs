@@ -1046,6 +1046,8 @@ mod tests {
             fast_speed_new: SpiFastSpeedNew::_33_33MHz,
             micron_mode: SpiNaplesMicronMode::DummyCycle,
         };
+        // Explicitly set for Naples compatibility
+        setup.efh.efs_generations = 0xffffffff.into();
         setup.set_spi_mode_zen_naples(Some(spi_mode));
         assert!(setup.spi_mode_bulldozer()?.is_none());
         assert!(
