@@ -25,19 +25,15 @@ use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
 pub fn header_from_collection_mut<T: Sized + FromBytes + AsBytes>(
     buf: &mut [u8],
 ) -> Option<&mut T> {
-    match LayoutVerified::<_, T>::new_from_prefix(buf) {
-        Some((item, _xbuf)) => Some(item.into_mut()),
-        None => None,
-    }
+    LayoutVerified::<_, T>::new_from_prefix(buf)
+        .map(|(item, _xbuf)| item.into_mut())
 }
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
 pub fn header_from_collection<T: Sized + FromBytes>(buf: &[u8]) -> Option<&T> {
-    match LayoutVerified::<_, T>::new_from_prefix(buf) {
-        Some((item, _xbuf)) => Some(item.into_ref()),
-        None => None,
-    }
+    LayoutVerified::<_, T>::new_from_prefix(buf)
+        .map(|(item, _xbuf)| item.into_ref())
 }
 
 type LU32 = U32<LittleEndian>;
@@ -312,18 +308,12 @@ impl Efh {
     ) -> Option<Location> {
         if Efh::is_invalid_directory_table_location(v) {
             None
-        } else if let Some(amd_physical_mode_mmio_size) =
-            amd_physical_mode_mmio_size
-        {
-            match mmio_decode(v, amd_physical_mode_mmio_size) {
+        } else if let Some(mmio_size) = amd_physical_mode_mmio_size {
+            match mmio_decode(v, mmio_size) {
                 Ok(v) => Some(v),
                 Err(Error::DirectoryTypeMismatch) => {
                     // Rome is a grey-area that supports both MMIO addresses and offsets
-                    if v < amd_physical_mode_mmio_size {
-                        Some(v)
-                    } else {
-                        None
-                    }
+                    (v < mmio_size).then_some(v)
                 }
                 Err(_) => None,
             }
@@ -398,14 +388,13 @@ impl Efh {
         &mut self,
         value: Option<EfhBulldozerSpiMode>,
     ) {
-        self.spi_mode_bulldozer = match value {
-            None => [0xff, 0xff, 0xff],
-            Some(x) => [
+        self.spi_mode_bulldozer = value.map_or([0xff, 0xff, 0xff], |x| {
+            [
                 x.read_mode.to_u8().unwrap(),
                 x.fast_speed_new.to_u8().unwrap(),
                 0xff,
-            ],
-        }
+            ]
+        });
     }
 
     pub fn spi_mode_zen_naples(&self) -> Result<Option<EfhNaplesSpiMode>> {
@@ -428,14 +417,13 @@ impl Efh {
     }
 
     pub fn set_spi_mode_zen_naples(&mut self, value: Option<EfhNaplesSpiMode>) {
-        self.spi_mode_zen_naples = match value {
-            None => [0xff, 0xff, 0xff],
-            Some(x) => [
+        self.spi_mode_zen_naples = value.map_or([0xff, 0xff, 0xff], |x| {
+            [
                 x.read_mode.to_u8().unwrap(),
                 x.fast_speed_new.to_u8().unwrap(),
                 x.micron_mode.to_u8().unwrap(),
-            ],
-        }
+            ]
+        });
     }
 
     pub fn spi_mode_zen_rome(&self) -> Result<Option<EfhRomeSpiMode>> {
@@ -458,14 +446,13 @@ impl Efh {
     }
 
     pub fn set_spi_mode_zen_rome(&mut self, value: Option<EfhRomeSpiMode>) {
-        self.spi_mode_zen_rome = match value {
-            None => [0xff, 0xff, 0xff],
-            Some(x) => [
+        self.spi_mode_zen_rome = value.map_or([0xff, 0xff, 0xff], |x| {
+            [
                 x.read_mode.to_u8().unwrap(),
                 x.fast_speed_new.to_u8().unwrap(),
                 x.micron_mode.to_u8().unwrap(),
-            ],
-        }
+            ]
+        });
     }
 }
 
