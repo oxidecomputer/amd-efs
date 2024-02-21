@@ -86,60 +86,51 @@ impl<
         amd_physical_mode_mmio_size: Option<u32>,
     ) -> Result<Self> {
         let mut buf: [u8; MAIN_HEADER_SIZE] = [0xff; MAIN_HEADER_SIZE];
-        assert_eq!(MAIN_HEADER_SIZE, size_of::<MainHeader>()); // TODO: move to compile-time
+        assert_eq!(MAIN_HEADER_SIZE, size_of::<MainHeader>());
         storage.read_exact(beginning, &mut buf)?;
-        match header_from_collection::<MainHeader>(&buf[..]) {
-            Some(header) => {
-                let cookie = header.cookie();
-                if MainHeader::ALLOWED_COOKIES.contains(&cookie) {
-                    let directory_address_mode =
-                        header.additional_info().address_mode();
-                    match directory_address_mode {
-                        AddressMode::PhysicalAddress
-                        | AddressMode::EfsRelativeOffset
-                        | AddressMode::DirectoryRelativeOffset => {}
-                        _ => return Err(Error::DirectoryTypeMismatch),
-                    }
-                    let mut entries = [Item::default(); MAX_DIRECTORY_ENTRIES];
-                    let mut cursor = beginning
-                        .checked_add(MAIN_HEADER_SIZE as u32)
-                        .ok_or(Error::DirectoryRangeCheck)?;
-                    for (i, ie) in entries
-                        .iter_mut()
-                        .enumerate()
-                        .take(header.total_entries() as usize)
-                    {
-                        if i < MAX_DIRECTORY_ENTRIES {
-                            let mut buf: [u8; ITEM_SIZE] = [0xff; ITEM_SIZE];
-                            assert_eq!(ITEM_SIZE, size_of::<Item>()); // TODO: move to compile-time
-                            storage.read_exact(cursor, &mut buf)?;
-                            cursor = cursor
-                                .checked_add(ITEM_SIZE as u32)
-                                .ok_or(Error::DirectoryRangeCheck)?;
-                            match header_from_collection::<Item>(&buf[..]) {
-                                Some(entry) => {
-                                    *ie = *entry;
-                                }
-                                None => return Err(Error::Marshal),
-                            }
-                        } else {
-                            return Err(Error::DirectoryRangeCheck);
-                        }
-                    }
-                    Ok(Self {
-                        beginning,
-                        mode3_base,
-                        directory_address_mode,
-                        header: *header,
-                        amd_physical_mode_mmio_size,
-                        entries,
-                    })
-                } else {
-                    Err(Error::DirectoryTypeMismatch)
-                }
-            }
-            None => Err(Error::Marshal),
+        let header = header_from_collection::<MainHeader>(&buf[..])
+            .ok_or(Error::Marshal)?;
+        let cookie = header.cookie();
+        if !MainHeader::ALLOWED_COOKIES.contains(&cookie) {
+            return Err(Error::DirectoryTypeMismatch);
         }
+        let directory_address_mode = header.additional_info().address_mode();
+        let directory_type_matches = matches!(
+            directory_address_mode,
+            AddressMode::PhysicalAddress
+                | AddressMode::EfsRelativeOffset
+                | AddressMode::DirectoryRelativeOffset
+        );
+        if !directory_type_matches {
+            return Err(Error::DirectoryTypeMismatch);
+        }
+        let mut entries = [Item::default(); MAX_DIRECTORY_ENTRIES];
+        let mut cursor = beginning
+            .checked_add(MAIN_HEADER_SIZE as u32)
+            .ok_or(Error::DirectoryRangeCheck)?;
+        for (i, ie) in
+            entries.iter_mut().enumerate().take(header.total_entries() as usize)
+        {
+            if i >= MAX_DIRECTORY_ENTRIES {
+                return Err(Error::DirectoryRangeCheck);
+            }
+            let mut buf: [u8; ITEM_SIZE] = [0xff; ITEM_SIZE];
+            assert_eq!(ITEM_SIZE, size_of::<Item>()); // TODO: move to compile-time
+            storage.read_exact(cursor, &mut buf)?;
+            cursor = cursor
+                .checked_add(ITEM_SIZE as u32)
+                .ok_or(Error::DirectoryRangeCheck)?;
+            *ie = *header_from_collection::<Item>(&buf[..])
+                .ok_or(Error::Marshal)?;
+        }
+        Ok(Self {
+            beginning,
+            mode3_base,
+            directory_address_mode,
+            header: *header,
+            amd_physical_mode_mmio_size,
+            entries,
+        })
     }
     fn create(
         beginning: Location,
@@ -479,20 +470,13 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         }
 
         let mut buf: [u8; size_of::<Efh>()] = [0xFF; size_of::<Efh>()]; // FIXME should be: EFH_SIZE == size_of::<Efh>()
-        match header_from_collection_mut(&mut buf[..]) {
-            Some(item) => {
-                let mut efh: Efh = Efh::default();
-                efh.efs_generations.set(
-                    Efh::efs_generations_for_processor_generation(
-                        processor_generation,
-                    ),
-                );
-                *item = efh;
-            }
-            None => {
-                return Err(Error::Marshal);
-            }
-        }
+        let item =
+            header_from_collection_mut(&mut buf[..]).ok_or(Error::Marshal)?;
+        let mut efh: Efh = Efh::default();
+        efh.efs_generations.set(Efh::efs_generations_for_processor_generation(
+            processor_generation,
+        ));
+        *item = efh;
 
         storage.erase_and_write_blocks(
             storage
@@ -747,15 +731,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             }
             _ => return Err(Error::DirectoryTypeMismatch),
         }
-        match self.bhd_directories(None) {
-            Ok(items) => {
-                for _directory in items {
-                    // TODO: Ensure that we don't have too many similar ones
-                }
-            }
-            Err(e) => {
-                return Err(e);
-            }
+        let items = self.bhd_directories(None)?;
+        for _directory in items {
+            // TODO: Ensure that we don't have too many similar ones
         }
         if self
             .efh
