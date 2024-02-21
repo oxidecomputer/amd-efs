@@ -95,13 +95,14 @@ impl<
             return Err(Error::DirectoryTypeMismatch);
         }
         let directory_address_mode = header.additional_info().address_mode();
-        let directory_type_matches = matches!(directory_address_mode,
+        let directory_type_matches = matches!(
+            directory_address_mode,
             AddressMode::PhysicalAddress
                 | AddressMode::EfsRelativeOffset
                 | AddressMode::DirectoryRelativeOffset
         );
         if !directory_type_matches {
-             return Err(Error::DirectoryTypeMismatch);
+            return Err(Error::DirectoryTypeMismatch);
         }
         let mut entries = [Item::default(); MAX_DIRECTORY_ENTRIES];
         let mut cursor = beginning
