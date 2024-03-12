@@ -8,7 +8,7 @@
 use crate::ondisk::*;
 
 // Note: This is written such that it will fail if the underlying struct has fields added/removed/renamed--if those have a public setter.
-macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_name:ident),* $(,)?]
+macro_rules! impl_struct_serde_conversion{($StructName:ident, $SerdeStructName:ident, $SerializingStructName:ident, [$($field_name:ident),* $(,)?]
 ) => (
     paste::paste!{
         #[cfg(feature = "serde")]
@@ -26,9 +26,9 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
         impl serde::Serialize for $StructName {
             fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
             where S: serde::Serializer, {
-                $SerdeStructName {
+                $SerializingStructName {
                     $(
-                        $field_name: self.[<serde_ $field_name>]().map_err(|_| serde::ser::Error::custom("value unknown"))?.into(),
+                        $field_name: self.[<serde_ $field_name>]().ok(),
                     )*
                 }.serialize(serializer)
             }
@@ -48,14 +48,16 @@ macro_rules! make_serde{($StructName:ident, $SerdeStructName:ident, [$($field_na
     }
 )}
 
-make_serde!(
+impl_struct_serde_conversion!(
     DirectoryAdditionalInfo,
     SerdeDirectoryAdditionalInfo,
+    SerdePermissiveSerializingDirectoryAdditionalInfo,
     [max_size, spi_block_size, base_address, address_mode, _reserved_0,]
 );
-make_serde!(
+impl_struct_serde_conversion!(
     PspSoftFuseChain,
     SerdePspSoftFuseChain,
+    SerdePermissiveSerializingPspSoftFuseChain,
     [
         secure_debug_unlock,
         _reserved_0,
