@@ -7,11 +7,12 @@ use crate::ondisk::DirectoryEntrySerde;
 pub use crate::ondisk::ProcessorGeneration;
 use crate::ondisk::EFH_POSITION;
 use crate::ondisk::{
-    mmio_decode, AddressMode, BhdDirectoryEntry, BhdDirectoryHeader,
-    ComboDirectoryEntry, ComboDirectoryHeader, DirectoryEntry, DirectoryHeader,
-    Efh, EfhBulldozerSpiMode, EfhNaplesSpiMode, EfhRomeSpiMode,
-    PspDirectoryEntry, PspDirectoryEntryType, PspDirectoryHeader,
-    ValueOrLocation, WEAK_ADDRESS_MODE,
+    mmio_decode, AddressMode, BhdDirectoryEntry, BhdDirectoryEntryType,
+    BhdDirectoryHeader, ComboDirectoryEntry, ComboDirectoryHeader,
+    DirectoryEntry, DirectoryHeader, Efh, EfhBulldozerSpiMode,
+    EfhEspiConfiguration, EfhNaplesSpiMode, EfhRomeSpiMode, PspDirectoryEntry,
+    PspDirectoryEntryType, PspDirectoryHeader, ValueOrLocation,
+    WEAK_ADDRESS_MODE,
 };
 use crate::types::Error;
 use crate::types::Result;
@@ -65,6 +66,9 @@ impl<
     pub fn header(&self) -> MainHeader {
         self.header
     }
+    pub fn beginning(&self) -> Location {
+        self.beginning
+    }
     pub fn directory_address_mode(&self) -> AddressMode {
         self.directory_address_mode
     }
@@ -79,7 +83,9 @@ impl<
     }
 
     /// Note: Caller should check whether it is the right cookie (afterwards)
-    fn load<T: FlashRead>(
+    /// This is only used to load the second-level directory when dumping.
+    /// There are nicer accessors otherwise (bhd_directory, psp_directory etc)
+    pub fn load<T: FlashRead>(
         storage: &T,
         beginning: Location,
         mode3_base: Location,
@@ -190,12 +196,12 @@ impl<
         Ok(())
     }
     #[cfg(feature = "std")]
-    pub fn save<T: FlashRead + FlashWrite>(
+    pub fn save(
         &mut self,
-        destination: &T,
-        range: ErasableRange,
+        erasable_block_size: usize,
+        range: &ErasableRange,
         payloads_beginning: ErasableLocation,
-    ) -> Result<usize> {
+    ) -> Result<Vec<u8>> {
         let cookie = self.header.cookie();
         if !MainHeader::ALLOWED_COOKIES.contains(&cookie) {
             return Err(Error::DirectoryTypeMismatch);
@@ -210,10 +216,8 @@ impl<
             )
             .map_err(|_| Error::DirectoryRangeCheck)?
             .with_spi_block_size_checked(
-                DirectoryAdditionalInfo::try_into_unit(
-                    destination.erasable_block_size(),
-                )
-                .ok_or(Error::DirectoryRangeCheck)?,
+                DirectoryAdditionalInfo::try_into_unit(erasable_block_size)
+                    .ok_or(Error::DirectoryRangeCheck)?,
             )
             .map_err(|_| Error::DirectoryRangeCheck)?
             .with_base_address(
@@ -222,7 +226,9 @@ impl<
                         .try_into()
                         .map_err(|_| Error::DirectoryRangeCheck)?,
                 )
-                .ok_or(Error::DirectoryRangeCheck)?,
+                // If that happens it's likely that your payload flash_location
+                // is not aligned 4 kiB.
+                .ok_or(Error::DirectoryPayloadMisaligned)?,
             )
             .with_address_mode(AddressMode::EfsRelativeOffset);
         self.header.set_additional_info(additional_info);
@@ -235,8 +241,7 @@ impl<
         for entry in &self.entries[..total_entries as usize] {
             result.extend_from_slice(entry.as_bytes());
         }
-        destination.erase_and_write_blocks(range.beginning, &result)?;
-        Ok(result.len())
+        Ok(result)
     }
     pub fn entries(&self) -> impl Iterator<Item = Item> + '_ {
         let mut index = 0usize;
@@ -347,7 +352,9 @@ pub const fn preferred_efh_location(
     processor_generation: ProcessorGeneration,
 ) -> Location {
     match processor_generation {
-        ProcessorGeneration::Naples => 0x2_0000,
+        ProcessorGeneration::Naples
+        | ProcessorGeneration::Genoa
+        | ProcessorGeneration::Turin => 0x2_0000,
         ProcessorGeneration::Rome | ProcessorGeneration::Milan => 0xFA_0000,
     }
 }
@@ -387,13 +394,22 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         storage: &T,
         processor_generation: Option<ProcessorGeneration>,
     ) -> Result<ErasableLocation> {
-        for position in EFH_POSITION.iter() {
+        let positions = if let Some(
+            ProcessorGeneration::Genoa | ProcessorGeneration::Turin,
+        ) = processor_generation
+        {
+            // Starting with Genoa, only one EFS offset is allowed.
+            [0x2_0000].as_slice()
+        } else {
+            EFH_POSITION.as_slice()
+        };
+        for position in positions.iter() {
             let mut xbuf: [u8; size_of::<Efh>()] = [0; size_of::<Efh>()];
             storage.read_exact(*position, &mut xbuf)?;
             if let Some(item) = header_from_collection::<Efh>(&xbuf[..]) {
                 // Note: only one Efh with second_gen_efs() allowed in entire Flash!
                 if item.signature().ok().unwrap_or(0) == 0x55AA55AA
-                    && item.second_gen_efs()
+                    && !item.physical_address_mode()
                     && match processor_generation {
                         Some(x) => item.compatible_with_processor_generation(x),
                         None => true,
@@ -406,7 +422,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             }
         }
         // Old firmware header is better than no firmware header; TODO: Warn.
-        for position in EFH_POSITION.iter() {
+        for position in positions.iter() {
             let mut xbuf: [u8; size_of::<Efh>()] = [0; size_of::<Efh>()];
             storage.read_exact(*position, &mut xbuf)?;
             if let Some(item) = header_from_collection::<Efh>(&xbuf[..]) {
@@ -585,6 +601,9 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         let efh = &self.efh;
         let amd_physical_mode_mmio_size = self.amd_physical_mode_mmio_size;
         let positions = match processor_generation {
+            Some(ProcessorGeneration::Genoa | ProcessorGeneration::Turin) => {
+                [efh.bhd_directory_table_milan().ok(), None, None, None]
+            }
             Some(ProcessorGeneration::Milan) => {
                 [efh.bhd_directory_table_milan().ok(), None, None, None]
             }
@@ -708,9 +727,33 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         self.efh.set_spi_mode_zen_rome(value)
     }
 
-    /// Note: BEGINNING, END are coordinates (in Byte).
+    pub fn espi0_configuration(&self) -> Result<Option<EfhEspiConfiguration>> {
+        self.efh.espi0_configuration()
+    }
+
+    pub fn set_espi0_configuration(
+        &mut self,
+        value: Option<EfhEspiConfiguration>,
+    ) {
+        self.efh.set_espi0_configuration(value)
+    }
+
+    pub fn espi1_configuration(&self) -> Result<Option<EfhEspiConfiguration>> {
+        self.efh.espi1_configuration()
+    }
+
+    pub fn set_espi1_configuration(
+        &mut self,
+        value: Option<EfhEspiConfiguration>,
+    ) {
+        self.efh.set_espi1_configuration(value)
+    }
+
+    /// Create a directory but don't set it as the Efs main bhd directory.
+    /// The idea is to use this also for creating a second level directory.
     pub fn create_bhd_directory(
         &mut self,
+        cookie: [u8; 4],
         beginning: ErasableLocation,
         end: ErasableLocation,
         default_entry_address_mode: AddressMode,
@@ -731,13 +774,29 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             }
             _ => return Err(Error::DirectoryTypeMismatch),
         }
-        let items = self.bhd_directories(None)?;
-        for _directory in items {
-            // TODO: Ensure that we don't have too many similar ones
-        }
+        BhdDirectory::create(
+            beginning.into(),
+            0,
+            default_entry_address_mode,
+            cookie,
+            self.amd_physical_mode_mmio_size,
+            entries,
+        )
+    }
+    pub fn set_main_bhd_directory(
+        &mut self,
+        directory: &BhdDirectory,
+    ) -> Result<()> {
+        let beginning = directory.beginning;
         if self
             .efh
             .compatible_with_processor_generation(ProcessorGeneration::Milan)
+            || self.efh.compatible_with_processor_generation(
+                ProcessorGeneration::Genoa,
+            )
+            || self.efh.compatible_with_processor_generation(
+                ProcessorGeneration::Turin,
+            )
         {
             self.efh.set_bhd_directory_table_milan(beginning.into());
         // FIXME: ensure that the others are unset?
@@ -746,20 +805,13 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             // FIXME: ensure that the others are unset?
         }
         self.write_efh()?;
-        let result = BhdDirectory::create(
-            beginning.into(),
-            0,
-            default_entry_address_mode,
-            BhdDirectoryHeader::FIRST_LEVEL_COOKIE,
-            self.amd_physical_mode_mmio_size,
-            entries,
-        )?;
-        Ok(result)
+        Ok(())
     }
 
     // Note: BEGINNING, END are coordinates (in Byte).
     pub fn create_psp_directory(
         &mut self,
+        cookie: [u8; 4],
         beginning: ErasableLocation,
         end: ErasableLocation,
         default_entry_address_mode: AddressMode,
@@ -780,27 +832,25 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             }
             _ => return Err(Error::DirectoryTypeMismatch),
         }
-        match self.psp_directory() {
-            Err(Error::PspDirectoryHeaderNotFound) => {}
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(_) => {
-                return Err(Error::Duplicate);
-            }
-        }
-        // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.
-        self.efh.set_psp_directory_table_location_zen(beginning.into());
-        self.write_efh()?;
         let result = PspDirectory::create(
             beginning.into(),
             beginning.into(),
             default_entry_address_mode,
-            PspDirectoryHeader::FIRST_LEVEL_COOKIE,
+            cookie,
             self.amd_physical_mode_mmio_size,
             entries,
         )?;
         Ok(result)
+    }
+    pub fn set_main_psp_directory(
+        &mut self,
+        directory: &PspDirectory,
+    ) -> Result<()> {
+        let beginning = directory.beginning;
+        // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.
+        self.efh.set_psp_directory_table_location_zen(beginning.into());
+        self.write_efh()?;
+        Ok(())
     }
     pub fn psp_combo_subdirectory(
         &self,
@@ -838,6 +888,25 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
             {
                 let beginning = directory.payload_beginning(&entry)?;
                 return PspDirectory::load(
+                    self.storage,
+                    beginning,
+                    beginning,
+                    self.amd_physical_mode_mmio_size,
+                );
+            }
+        }
+        Err(Error::EntryNotFound)
+    }
+    pub fn bhd_subdirectory(
+        &self,
+        directory: &BhdDirectory,
+    ) -> Result<BhdDirectory> {
+        for entry in directory.entries() {
+            if let Ok(BhdDirectoryEntryType::SecondLevelDirectory) =
+                entry.typ_or_err()
+            {
+                let beginning = directory.payload_beginning(&entry)?;
+                return BhdDirectory::load(
                     self.storage,
                     beginning,
                     beginning,
@@ -1011,6 +1080,8 @@ mod tests {
             fast_speed_new: SpiFastSpeedNew::_33_33MHz,
             micron_mode: SpiNaplesMicronMode::DummyCycle,
         };
+        // Explicitly set for Naples compatibility
+        setup.efh.efs_generations = 0xffffffff.into();
         setup.set_spi_mode_zen_naples(Some(spi_mode));
         assert!(setup.spi_mode_bulldozer()?.is_none());
         assert!(

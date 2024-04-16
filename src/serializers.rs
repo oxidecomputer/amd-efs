@@ -75,3 +75,17 @@ make_serde!(
         _reserved_4,
     ]
 );
+make_serde!(
+    EfhEspiConfiguration,
+    SerdeEfhEspiConfiguration,
+    [
+        alert_pin,
+        clock,
+        data_bus,
+        enable_port_0x80,
+        respond_port_0x80,
+        invalid,
+        _reserved_1,
+        _reserved_2,
+    ]
+);
