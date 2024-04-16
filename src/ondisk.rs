@@ -130,6 +130,18 @@ impl Getter<Result<[u8; 3]>> for [u8; 3] {
     }
 }
 
+impl Getter<Result<[u8; 2]>> for [u8; 2] {
+    fn get1(self) -> Result<[u8; 2]> {
+        Ok(self)
+    }
+}
+
+impl Setter<[u8; 2]> for [u8; 2] {
+    fn set1(&mut self, value: [u8; 2]) {
+        *self = value
+    }
+}
+
 impl Getter<Result<[u8; 4]>> for [u8; 4] {
     fn get1(self) -> Result<[u8; 4]> {
         Ok(self)
@@ -191,11 +203,17 @@ make_accessors! {
         promontory_firmware_location || u32 : LU32 | pub get u32 : pub set u32,
         pub low_power_promontory_firmware_location || u32 : LU32 | pub get u32 : pub set u32,
         _padding2 || #[serde(default)] [u32; 2] : [LU32; 2],                      // at offset 0x38
+        // Excavator, Merlin Falcon
         pub(crate) spi_mode_bulldozer : [u8; 3],
         pub(crate) spi_mode_zen_naples : [u8; 3], // and Raven Ridge
         _reserved1 || #[serde(default)] u8 : u8,
         pub(crate) spi_mode_zen_rome : [u8; 3],
         _reserved2 || #[serde(default)] u8 : u8,
+        _reserved3 || #[serde(default)] u8 : u8,
+        vendor_id: [u8; 2],
+        vendor_board_id: [u8; 2],
+        pub(crate) espi0_configuration: u8, // bit 0 = 1: invalid
+        pub(crate) espi1_configuration: u8, // bit 0 = 1: invalid
     }
 }
 
@@ -211,15 +229,20 @@ impl Default for Efh {
             bhd_directory_tables: [0.into(); 3],        // probably invalid
             efs_generations: 0xffff_fffe.into(),
             bhd_directory_table_milan: 0xffff_ffff.into(),
-            _padding: 0xffff_ffff.into(),
-            promontory_firmware_location: 0xffff_ffff.into(),
-            low_power_promontory_firmware_location: 0xffff_ffff.into(),
-            _padding2: [0xffff_ffff.into(); 2],
+            _padding: 0.into(),
+            promontory_firmware_location: 0.into(),
+            low_power_promontory_firmware_location: 0.into(),
+            _padding2: [0.into(); 2],
             spi_mode_bulldozer: [0xff, 0xff, 0xff],
-            spi_mode_zen_naples: [0xff, 0xff, 0xff],
-            _reserved1: 0,
+            spi_mode_zen_naples: [0xff /* Observed: 0 */, 0xff, 0xff],
+            _reserved1: 0xff,
             spi_mode_zen_rome: [0xff, 0xff, 0xff],
-            _reserved2: 0,
+            _reserved2: 0xff,
+            _reserved3: 0xff,
+            vendor_board_id: [0xff, 0xff],
+            vendor_id: [0xff, 0xff],
+            espi0_configuration: 0xff,
+            espi1_configuration: 0xff,
         }
     }
 }
@@ -235,22 +258,15 @@ fn test_spi_mode_offsets() {
     assert!(offset_of!(Efh, spi_mode_zen_rome) == 0x47);
 }
 
-#[repr(i8)]
-#[derive(
-    Debug,
-    PartialEq,
-    FromPrimitive,
-    Clone,
-    Copy,
-    EnumString,
-    strum_macros::EnumIter,
-)]
+#[derive(Debug, PartialEq, Clone, Copy, EnumString, strum_macros::EnumIter)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ProcessorGeneration {
-    Naples = -1,
-    Rome = 0,
-    Milan = 1,
+    Naples,
+    Rome,
+    Milan,
+    Genoa,
+    Turin,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -295,6 +311,14 @@ impl Efh {
     /// Precondition: signature needs to be there--otherwise you might be reading garbage in the first place.
     /// Old (pre-Rome) boards had MMIO addresses instead of offsets in the slots.  Find out whether that's the case.
     pub fn physical_address_mode(&self) -> bool {
+        // Family 1Ah Models 00h–0Fh and 10h–1Fh does not clear bit 0 but expects offsets.
+        if self.efs_generations.get()
+            == Self::efs_generations_for_processor_generation(
+                ProcessorGeneration::Turin,
+            )
+        {
+            return false;
+        }
         !self.second_gen_efs()
     }
 
@@ -343,12 +367,15 @@ impl Efh {
             }
             ProcessorGeneration::Rome => {
                 // Rome didn't have generation flags yet, so make sure none of them are cleared.
+                // Bit 0 should be cleared (i.e. this is a second-gen EFS).
                 self.efs_generations.get() == 0xffff_fffe
             }
-            generation => {
-                let generation: u8 = generation as u8;
-                assert!(generation < 16);
-                self.efs_generations.get() & (1 << generation) == 0
+            ProcessorGeneration::Milan | ProcessorGeneration::Genoa => {
+                (self.efs_generations.get() & (1 << 0b0000)) == 0
+            }
+            ProcessorGeneration::Turin => {
+                // XXX: Is Turin Model 00h-0Fh or 10h-1Fh? If the former, should be 0b0010 instead.
+                (self.efs_generations.get() & (1 << 0b0011)) == 0
             }
         }
     }
@@ -361,11 +388,9 @@ impl Efh {
             ProcessorGeneration::Naples => 0xffff_ffff,
             // Rome didn't have generation flags yet, so make sure to clear none of them.
             ProcessorGeneration::Rome => 0xffff_fffe,
-            generation => {
-                let generation: u8 = generation as u8;
-                assert!(generation < 16);
-                0xffff_fffe & !(1 << generation)
-            }
+            ProcessorGeneration::Milan => 0xffff_fffc,
+            ProcessorGeneration::Genoa => 0xffff_fffe,
+            ProcessorGeneration::Turin => 0xffff_ffe3, // 0b1...00011
         }
     }
 
@@ -398,7 +423,10 @@ impl Efh {
     }
 
     pub fn spi_mode_zen_naples(&self) -> Result<Option<EfhNaplesSpiMode>> {
-        if self.spi_mode_zen_naples == [0xff, 0xff, 0xff] {
+        if !self
+            .compatible_with_processor_generation(ProcessorGeneration::Naples)
+            || self.spi_mode_zen_naples == [0xff, 0xff, 0xff]
+        {
             Ok(None)
         } else {
             Ok(Some(EfhNaplesSpiMode {
@@ -453,6 +481,46 @@ impl Efh {
                 x.micron_mode.to_u8().unwrap(),
             ]
         });
+    }
+
+    pub fn espi0_configuration(&self) -> Result<Option<EfhEspiConfiguration>> {
+        if self.espi0_configuration & 1 == 1 {
+            Ok(None)
+        } else {
+            Ok(Some(EfhEspiConfiguration::from_bytes([
+                self.espi0_configuration
+            ])))
+        }
+    }
+
+    pub fn set_espi0_configuration(
+        &mut self,
+        value: Option<EfhEspiConfiguration>,
+    ) {
+        self.espi0_configuration = match value {
+            None => 0xff,
+            Some(x) => x.into_bytes()[0],
+        }
+    }
+
+    pub fn espi1_configuration(&self) -> Result<Option<EfhEspiConfiguration>> {
+        if self.espi1_configuration & 1 == 1 {
+            Ok(None)
+        } else {
+            Ok(Some(EfhEspiConfiguration::from_bytes([
+                self.espi1_configuration
+            ])))
+        }
+    }
+
+    pub fn set_espi1_configuration(
+        &mut self,
+        value: Option<EfhEspiConfiguration>,
+    ) {
+        self.espi1_configuration = match value {
+            None => 0xff,
+            Some(x) => x.into_bytes()[0],
+        }
     }
 }
 
@@ -617,7 +685,16 @@ impl ValueOrLocation {
                     directory_address_mode,
                     AddressMode::EfsRelativeOffset,
                 ) {
-                    let v = u64::from(*x) | 0x4000_0000_0000_0000;
+                    let v = u64::from(*x)
+                        | if directory_address_mode
+                            == AddressMode::DirectoryRelativeOffset
+                            || directory_address_mode
+                                == AddressMode::OtherDirectoryRelativeOffset
+                        {
+                            0x4000_0000_0000_0000
+                        } else {
+                            0
+                        };
                     Ok(v)
                 } else {
                     Err(Error::EntryTypeMismatch)
@@ -736,6 +813,34 @@ macro_rules! make_bitfield_serde {(
         }
     }
 }}
+
+make_bitfield_serde! {
+    #[bitfield(bits = 8)]
+    #[repr(u8)]
+    #[derive(Copy, Clone, Debug)]
+    pub struct EfhEspiConfiguration {
+        #[skip(getters, setters)]
+        invalid || #[serde(default)] bool : bool,
+        pub enable_port_0x80 || bool : bool | pub get bool : pub set bool,
+        pub alert_pin || u8 : B1 | pub get u8 : pub set u8,
+        pub data_bus || u8 : B1 | pub get u8 : pub set u8,
+        pub clock || u8 : B1 | pub get u8 : pub set u8,
+        pub respond_port_0x80 || bool : bool | pub get bool : pub set bool,
+        #[allow(non_snake_case)]
+        _reserved_1 || #[serde(default)] u8 : B1,
+        #[allow(non_snake_case)]
+        _reserved_2 || #[serde(default)] u8 : B1,
+    }
+}
+
+impl EfhEspiConfiguration {
+    fn set_invalid(&mut self, value: bool) {
+        assert!(!value);
+    }
+    fn invalid(&self) -> bool {
+        false
+    }
+}
 
 make_bitfield_serde! {
     #[bitfield(bits = 32)]
@@ -925,6 +1030,12 @@ pub enum PspDirectoryEntryType {
     PspTrustletPublicKey = 0x0D,
     SmuOffChipFirmware12 = 0x12,
     PspEarlySecureUnlockDebugImage = 0x13,
+    TeeIpKeyManagerDriver = 0x15,
+    TeeSevDriver = 0x1a,
+    TeeBootDriver = 0x1b,
+    TeeSocDriver = 0x1c,
+    TeeDebugDriver = 0x1d,
+    TeeInterfaceDriver = 0x1f,
     DiscoveryBinary = 0x20,
     WrappedIkek = 0x21,
     PspTokenUnlockData = 0x22,
@@ -988,6 +1099,13 @@ pub enum PspDirectoryEntryType {
     DmcuIsr = 0x59,
     Msmu0 = 0x5A,
     Msmu1 = 0x5B,
+    MpioOffchipFirmware = 0x5D,
+    RasDriver = 0x64,
+    RasTrustedApplication = 0x65,
+    TeeFhpDriver = 0x67,
+    TeeSpdmDriver = 0x68,
+    PspStage2Bootloader = 0x73,
+    RegisterInitializationBinary = 0x76,
     OemSysTa = 0x80,
     OemSysTaPublicKey = 0x81,
     OemIkek = 0x82,
@@ -998,6 +1116,12 @@ pub enum PspDirectoryEntryType {
     MpmFactoryProvisioningData = 0x87,
     MpmWlanFirmware = 0x88,
     MpmSecurityDriver = 0x89,
+    MpdmaTigerfishFirmware = 0x8C,
+    Gmi3PhyFirmware = 0x91,
+    MpdmaPageMigrationFirmware = 0x92,
+    AspSramFirmwareExtension = 0x9D,
+    RegisterAccessWhitelist = 0x9F,
+    S3Image = 0xA0,
 }
 
 impl DummyErrorChecks for PspDirectoryEntryType {}
@@ -1108,8 +1232,10 @@ make_bitfield_serde! {
         pub type_: PspDirectoryEntryType | pub get PspDirectoryEntryType : pub set PspDirectoryEntryType,
         pub sub_program || u8 : B8 | pub get u8 : pub set u8, // function of AMD Family and Model; only useful for types 8, 0x24, 0x25
         pub rom_id: PspDirectoryRomId | pub get PspDirectoryRomId : pub set PspDirectoryRomId,
+        pub writable: bool | pub get bool : pub set bool,
+        pub instance || u8 : B4 | pub get u8 : pub set u8,
         #[allow(non_snake_case)]
-        _reserved_0 || #[serde(default)] u16 : B14,
+        _reserved_0 || #[serde(default)] u16 : B9,
     }
 }
 
@@ -1215,6 +1341,8 @@ impl PspDirectoryEntry {
     const SIZE_VALUE_MARKER: u32 = 0xFFFF_FFFF;
     make_attr_proxy_with_fallible_getter!(typ, type_, PspDirectoryEntryType);
     make_attr_proxy!(sub_program, sub_program, u8);
+    make_attr_proxy!(instance, instance, u8);
+    make_attr_proxy!(writable, writable, bool);
     make_attr_proxy_with_fallible_getter!(rom_id, rom_id, PspDirectoryRomId);
     pub fn new() -> Self {
         Self::default()

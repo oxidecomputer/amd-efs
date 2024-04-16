@@ -11,6 +11,11 @@ pub enum Error {
     PspDirectoryHeaderNotFound,
     #[cfg_attr(feature = "std", error("bhd directory header not found"))]
     BhdDirectoryHeaderNotFound,
+    #[cfg_attr(
+        feature = "std",
+        error("directory payload not aligned to 4 kiB")
+    )]
+    DirectoryPayloadMisaligned,
     #[cfg_attr(feature = "std", error("directory range check"))]
     DirectoryRangeCheck,
     #[cfg_attr(feature = "std", error("directory payload range check"))]
