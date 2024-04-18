@@ -1,8 +1,9 @@
-use amd_flash::ErasableLocation;
-use amd_flash::FlashAlign;
-use amd_flash::FlashRead;
-use amd_flash::FlashWrite;
-use amd_flash::Result;
+use crate::flash;
+use flash::ErasableLocation;
+use flash::FlashAlign;
+use flash::FlashRead;
+use flash::FlashWrite;
+use flash::Result;
 
 const UPPER_HALF_OFFSET: u32 = 0x100_0000; // 16 MiB
 const MODULUS: u32 = 0x200_0000; // 32 MiB
@@ -31,24 +32,22 @@ impl FlashWrite for Upper16MiBFlashAdapter<'_> {
     fn erase_block(
         &self,
         offset: ErasableLocation,
-    ) -> core::result::Result<(), amd_flash::Error> {
+    ) -> core::result::Result<(), flash::Error> {
         let offset = self.location(offset)?;
         let offset = (offset + UPPER_HALF_OFFSET) % MODULUS;
         self.underlying_writer.erase_block(
-            self.erasable_location(offset)
-                .ok_or(amd_flash::Error::Alignment)?,
+            self.erasable_location(offset).ok_or(flash::Error::Alignment)?,
         )
     }
     fn erase_and_write_block(
         &self,
         offset: ErasableLocation,
         buf: &[u8],
-    ) -> core::result::Result<(), amd_flash::Error> {
+    ) -> core::result::Result<(), flash::Error> {
         let offset = self.location(offset)?;
         let offset = (offset + UPPER_HALF_OFFSET) % MODULUS;
         self.underlying_writer.erase_and_write_block(
-            self.erasable_location(offset)
-                .ok_or(amd_flash::Error::Alignment)?,
+            self.erasable_location(offset).ok_or(flash::Error::Alignment)?,
             buf,
         )
     }

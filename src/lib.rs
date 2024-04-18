@@ -1,8 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod adapters;
+pub mod allocators;
 mod amdfletcher32;
 mod efs;
+pub mod flash;
 mod ondisk;
 mod serializers;
 mod struct_accessors;

@@ -1,12 +1,12 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
+use crate::flash::Location;
 use crate::struct_accessors::make_accessors;
 use crate::struct_accessors::DummyErrorChecks;
 use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
 use crate::types::Error;
 use crate::types::Result;
-use amd_flash::Location;
 use byteorder::LittleEndian;
 use core::convert::TryFrom;
 use core::convert::TryInto;
