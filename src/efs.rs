@@ -1,4 +1,5 @@
 use crate::amdfletcher32::AmdFletcher32;
+use crate::flash;
 use crate::ondisk::header_from_collection;
 use crate::ondisk::header_from_collection_mut;
 #[cfg(feature = "std")]
@@ -17,11 +18,11 @@ use crate::ondisk::{
 use crate::types::Error;
 use crate::types::Result;
 
-#[cfg(feature = "std")]
-use amd_flash::ErasableRange;
-use amd_flash::{ErasableLocation, FlashRead, FlashWrite, Location};
 use core::convert::TryInto;
 use core::mem::size_of;
+#[cfg(feature = "std")]
+use flash::ErasableRange;
+use flash::{ErasableLocation, FlashRead, FlashWrite, Location};
 use zerocopy::AsBytes;
 use zerocopy::FromBytes;
 
@@ -989,13 +990,14 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::{EfhBulldozerSpiMode, EfhNaplesSpiMode, EfhRomeSpiMode};
+    use crate::flash;
     use crate::ondisk::{
         SpiFastSpeedNew, SpiNaplesMicronMode, SpiReadMode, SpiRomeMicronMode,
     };
     use crate::Efh;
     use crate::Efs;
     use crate::Error;
-    use amd_flash::{ErasableLocation, FlashAlign, FlashRead, FlashWrite};
+    use flash::{ErasableLocation, FlashAlign, FlashRead, FlashWrite};
 
     struct Storage {}
     impl FlashAlign for Storage {
@@ -1008,7 +1010,7 @@ mod tests {
             &self,
             _: u32,
             _: &mut [u8],
-        ) -> core::result::Result<(), amd_flash::Error> {
+        ) -> core::result::Result<(), flash::Error> {
             todo!()
         }
     }
@@ -1016,14 +1018,14 @@ mod tests {
         fn erase_block(
             &self,
             _: ErasableLocation,
-        ) -> core::result::Result<(), amd_flash::Error> {
+        ) -> core::result::Result<(), flash::Error> {
             todo!()
         }
         fn erase_and_write_block(
             &self,
             _: ErasableLocation,
             _: &[u8],
-        ) -> core::result::Result<(), amd_flash::Error> {
+        ) -> core::result::Result<(), flash::Error> {
             todo!()
         }
     }
