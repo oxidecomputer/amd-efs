@@ -1354,6 +1354,13 @@ impl PspDirectoryEntry {
         result.internal_source = value.into();
         Ok(result)
     }
+    pub fn value(&self) -> Result<u64> {
+        if self.internal_size.get() == Self::SIZE_VALUE_MARKER {
+            Ok(self.internal_source.get())
+        } else {
+            Err(Error::EntryTypeMismatch)
+        }
+    }
     /// Note: Caller can modify other attributes using the with_ accessors.
     pub fn new_payload(
         directory_address_mode: AddressMode,
