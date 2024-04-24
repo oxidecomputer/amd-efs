@@ -4,29 +4,48 @@
 
 use core::convert::TryInto;
 
+/// This is any Location on the Flash chip
+pub type Location = u32;
+
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum IoError {
+    #[cfg_attr(feature = "std", error("could not open backing store"))]
+    Open,
+    #[cfg_attr(
+        feature = "std",
+        error("could not read 0x{size:x} B starting at 0x{start:x} B")
+    )]
+    Read { start: Location, size: usize },
+    #[cfg_attr(
+        feature = "std",
+        error("could not write 0x{size:x} B starting at 0x{start:x} B")
+    )]
+    Write { start: Location, size: usize },
+    #[cfg_attr(
+        feature = "std",
+        error("could not erase 0x{size:x} B starting at 0x{start:x} B")
+    )]
+    Erase { start: Location, size: usize },
+    #[cfg_attr(feature = "std", error("could not flush"))]
+    Flush,
+}
+
 #[derive(Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum Error {
     #[cfg_attr(feature = "std", error("io"))]
-    Io,
+    Io(IoError),
     #[cfg_attr(
         feature = "std",
-        error("alignment is not good enough for erasability of block")
+        error("block not aligned for erase (block size = 0x{erasable_block_size:x} B, intra block offset = 0x{intra_block_offset:x} B)")
     )]
-    Alignment,
-    #[cfg_attr(feature = "std", error("programmer violated an invariant"))]
-    Programmer,
-    #[cfg_attr(
-        feature = "std",
-        error("no area of requested size is available")
-    )]
+    Alignment { erasable_block_size: usize, intra_block_offset: usize },
+    #[cfg_attr(feature = "std", error("requested size is unavailable"))]
     Size,
 }
 
 pub type Result<Q> = core::result::Result<Q, Error>;
-
-/// This is any Location on the Flash chip
-pub type Location = u32;
 
 /// This is a Location which definitely is aligned on an erase block boundary
 #[derive(Clone, Copy, Debug)]
@@ -49,14 +68,18 @@ impl ErasableLocation {
         end.saturating_sub(beginning)
     }
     pub fn advance(&self, amount: usize) -> Result<Self> {
-        if amount & (self.erasable_block_mask() as usize) != 0 {
-            return Err(Error::Alignment);
+        let mask = self.erasable_block_mask() as usize;
+        if amount & mask != 0 {
+            return Err(Error::Alignment {
+                erasable_block_size: self.erasable_block_size,
+                intra_block_offset: amount & mask,
+            });
         }
         let pos = (self.location as usize)
             .checked_add(amount)
-            .ok_or(Error::Alignment)?;
+            .expect("Location within 4 GiB");
         Ok(Self {
-            location: pos.try_into().map_err(|_| Error::Alignment)?,
+            location: pos.try_into().expect("Location within 4 GiB"),
             erasable_block_size: self.erasable_block_size,
         })
     }
@@ -64,7 +87,7 @@ impl ErasableLocation {
         // Round up to a multiple of erasable_block_size()
         let diff =
             0usize.wrapping_sub(amount) & (self.erasable_block_mask() as usize);
-        let amount = amount.checked_add(diff).ok_or(Error::Alignment)?;
+        let amount = amount.checked_add(diff).expect("Location within 4 GiB");
         self.advance(amount)
     }
 }
@@ -82,7 +105,7 @@ pub struct ErasableRange {
 }
 impl ErasableRange {
     pub fn new(beginning: ErasableLocation, end: ErasableLocation) -> Self {
-        assert!(Location::from(beginning) <= Location::from(end)); // TODO nicer
+        assert!(Location::from(beginning) <= Location::from(end));
         Self { beginning, end }
     }
     /// Splits the Range after at least SIZE Byte, if possible.
@@ -124,10 +147,17 @@ pub trait FlashAlign {
     fn erasable_location(
         &self,
         location: Location,
-    ) -> Option<ErasableLocation> {
+    ) -> Result<ErasableLocation> {
         let erasable_block_size = self.erasable_block_size();
-        self.is_aligned(location)
-            .then_some(ErasableLocation { location, erasable_block_size })
+        if self.is_aligned(location) {
+            Ok(ErasableLocation { location, erasable_block_size })
+        } else {
+            Err(Error::Alignment {
+                erasable_block_size: self.erasable_block_size(),
+                intra_block_offset: (location & self.erasable_block_mask())
+                    as usize,
+            })
+        }
     }
     /// Given an erasable location, returns the corresponding location
     /// IF the erasable location is compatible with our instance.
@@ -138,7 +168,10 @@ pub trait FlashAlign {
         if erasable_location.erasable_block_size == self.erasable_block_size() {
             Ok(erasable_location.location)
         } else {
-            Err(Error::Alignment)
+            Err(Error::Alignment {
+                erasable_block_size: self.erasable_block_size(),
+                intra_block_offset: erasable_location.erasable_block_size,
+            })
         }
     }
 }
@@ -150,9 +183,7 @@ pub trait FlashWrite: FlashRead + FlashAlign {
         location: ErasableLocation,
         buffer: &mut [u8],
     ) -> Result<()> {
-        if buffer.len() != self.erasable_block_size() {
-            return Err(Error::Programmer);
-        }
+        assert_eq!(buffer.len(), self.erasable_block_size());
         self.read_exact(self.location(location)?, buffer)?;
         Ok(())
     }
@@ -204,6 +235,12 @@ mod tests {
                 erasable_block_size: ERASABLE_BLOCK_SIZE,
             }
         }
+        pub fn new_block_size(
+            buf: &'a mut [u8],
+            erasable_block_size: usize,
+        ) -> Self {
+            Self { buf: RefCell::new(buf), erasable_block_size }
+        }
     }
 
     impl FlashRead for FlashImage<'_> {
@@ -237,9 +274,7 @@ mod tests {
             let buf = self.buf.borrow();
             let block = &buf
                 [location as usize..(location as usize + erasable_block_size)];
-            if buffer.len() != erasable_block_size {
-                return Err(Error::Programmer);
-            }
+            assert_eq!(buffer.len(), erasable_block_size);
             buffer[..].copy_from_slice(block);
             Ok(())
         }
@@ -287,4 +322,74 @@ mod tests {
         assert_eq!(buf, [2u8; ERASABLE_BLOCK_SIZE]);
         Ok(())
     }
+
+    #[test]
+    #[should_panic]
+    fn flash_image_misaligned_erasure() {
+        let mut storage = [0xFFu8; 256 * KIB];
+        let flash_image = FlashImage::new(&mut storage[..]);
+        flash_image.erasable_location(Location::from(1u32)).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Alignment")]
+    fn flash_image_misaligned_advancement() {
+        let mut storage = [0xFFu8; 256 * KIB];
+        let flash_image = FlashImage::new(&mut storage[..]);
+        let beginning_1 =
+            flash_image.erasable_location(Location::from(0u32)).unwrap();
+        beginning_1.advance(1).unwrap();
+    }
+
+    #[test]
+    fn flash_image_aligned_advancement() {
+        let mut storage = [0xFFu8; 256 * KIB];
+        let flash_image = FlashImage::new(&mut storage[..]);
+        let beginning_1 =
+            flash_image.erasable_location(Location::from(0u32)).unwrap();
+        beginning_1.advance_at_least(1).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Alignment")]
+    fn flash_image_mistaken_storage() {
+        let mut storage_0 = [0xFFu8; 256 * KIB];
+        let flash_image_0 = FlashImage::new(&mut storage_0[..]);
+        let mut storage_1 = [0xFFu8; 256 * KIB];
+        let flash_image_1 =
+            FlashImage::new_block_size(&mut storage_1[..], 1 * KIB);
+        let beginning_0 =
+            flash_image_0.erasable_location(Location::from(0u32)).unwrap();
+        flash_image_1.location(beginning_0).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion")]
+    fn flash_image_mistaken_buffer() {
+        let mut storage_0 = [0xFFu8; 256 * KIB];
+        let flash_image_0 = FlashImage::new(&mut storage_0[..]);
+        let mut buffer = [0xFFu8; 1 * KIB];
+        let beginning_0 =
+            flash_image_0.erasable_location(Location::from(0u32)).unwrap();
+        flash_image_0.read_erasable_block(beginning_0, &mut buffer).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Size")]
+    fn flash_image_too_small() {
+        use crate::allocators::FlashAllocate;
+        let mut storage_0 = [0xFFu8; 256 * KIB];
+        let flash_image_0 = FlashImage::new(&mut storage_0[..]);
+        let beginning =
+            flash_image_0.erasable_location(Location::from(0u32)).unwrap();
+        let end = beginning.advance(256 * KIB).unwrap();
+        let mut allocator = crate::allocators::ArenaFlashAllocator::new(
+            0,
+            257 * KIB,
+            ErasableRange { beginning, end },
+        )
+        .unwrap();
+        allocator.take_at_least(1).unwrap();
+    }
+    /* Test that has two different storages with different alignment is not present. */
 }

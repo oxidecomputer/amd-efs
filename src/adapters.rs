@@ -35,9 +35,7 @@ impl FlashWrite for Upper16MiBFlashAdapter<'_> {
     ) -> core::result::Result<(), flash::Error> {
         let offset = self.location(offset)?;
         let offset = (offset + UPPER_HALF_OFFSET) % MODULUS;
-        self.underlying_writer.erase_block(
-            self.erasable_location(offset).ok_or(flash::Error::Alignment)?,
-        )
+        self.underlying_writer.erase_block(self.erasable_location(offset)?)
     }
     fn erase_and_write_block(
         &self,
@@ -46,10 +44,8 @@ impl FlashWrite for Upper16MiBFlashAdapter<'_> {
     ) -> core::result::Result<(), flash::Error> {
         let offset = self.location(offset)?;
         let offset = (offset + UPPER_HALF_OFFSET) % MODULUS;
-        self.underlying_writer.erase_and_write_block(
-            self.erasable_location(offset).ok_or(flash::Error::Alignment)?,
-            buf,
-        )
+        self.underlying_writer
+            .erase_and_write_block(self.erasable_location(offset)?, buf)
     }
 }
 

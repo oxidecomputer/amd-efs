@@ -375,19 +375,6 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         self.efh.compatible_with_processor_generation(processor_generation)
     }
 
-    // FIXME maybe not public
-    pub fn erasable_location(
-        &self,
-        location: Location,
-    ) -> Option<ErasableLocation> {
-        self.storage.erasable_location(location)
-    }
-    pub fn erasable_location_mut(
-        &mut self,
-        location: Location,
-    ) -> Option<ErasableLocation> {
-        self.storage.erasable_location(location)
-    }
     // TODO: If we wanted to, we could also try the whole thing on the top 16 MiB again
     // (I think it would be better to have the user just construct two
     // different Efs instances in that case)
@@ -418,7 +405,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 {
                     return storage
                         .erasable_location(*position)
-                        .ok_or(Error::Misaligned);
+                        .map_err(|_| Error::Misaligned);
                 }
             }
         }
@@ -438,7 +425,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 {
                     return storage
                         .erasable_location(*position)
-                        .ok_or(Error::Misaligned);
+                        .map_err(|_| Error::Misaligned);
                 }
             }
         }
@@ -498,7 +485,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
         storage.erase_and_write_blocks(
             storage
                 .erasable_location(efh_beginning)
-                .ok_or(Error::Misaligned)?,
+                .map_err(|_| Error::Misaligned)?,
             &buf,
         )?;
         Self::load(
