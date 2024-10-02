@@ -1104,6 +1104,7 @@ pub enum PspDirectoryEntryType {
     RasTrustedApplication = 0x65,
     TeeFhpDriver = 0x67,
     TeeSpdmDriver = 0x68,
+    TeeDpeDriver = 0x69,
     PspStage2Bootloader = 0x73,
     RegisterInitializationBinary = 0x76,
     OemSysTa = 0x80,
