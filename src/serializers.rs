@@ -84,8 +84,7 @@ make_serde!(
         data_bus,
         enable_port_0x80,
         respond_port_0x80,
+        io_mode,
         invalid,
-        _reserved_1,
-        _reserved_2,
     ]
 );

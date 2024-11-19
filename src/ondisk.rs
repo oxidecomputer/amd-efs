@@ -814,6 +814,24 @@ macro_rules! make_bitfield_serde {(
     }
 }}
 
+#[derive(
+    Debug, PartialEq, Eq, FromPrimitive, Clone, Copy, BitfieldSpecifier,
+)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum EspiIoMode {
+    Auto = 0,
+    ForceSingle = 1,
+    ForceDual = 2,
+    ForceQuad = 3,
+}
+
+impl Default for EspiIoMode {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
 make_bitfield_serde! {
     #[bitfield(bits = 8)]
     #[repr(u8)]
@@ -826,10 +844,7 @@ make_bitfield_serde! {
         pub data_bus || u8 : B1 | pub get u8 : pub set u8,
         pub clock || u8 : B1 | pub get u8 : pub set u8,
         pub respond_port_0x80 || bool : bool | pub get bool : pub set bool,
-        #[allow(non_snake_case)]
-        _reserved_1 || #[serde(default)] u8 : B1,
-        #[allow(non_snake_case)]
-        _reserved_2 || #[serde(default)] u8 : B1,
+        pub io_mode : EspiIoMode | pub get EspiIoMode : pub set EspiIoMode,
     }
 }
 
