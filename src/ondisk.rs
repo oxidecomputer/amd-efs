@@ -294,6 +294,14 @@ pub struct EfhRomeSpiMode {
     pub micron_mode: SpiRomeMicronMode,
 }
 
+const EFS_GENERATION_FAMILY_17H_MODELS_30H_UNTIL_3FH: u32 = 0xffff_fffe; // Rome; again--like in Genoa
+const EFS_GENERATION_FAMILY_19H_MODELS_00H_UNTIL_0FH: u32 = 0xffff_fffc;
+const EFS_GENERATION_FAMILY_19H_MODELS_10H_UNTIL_1FH: u32 = 0xffff_fffe; // Genoa
+                                                                         //const EFS_GENERATION_FAMILY_19H_MODELS_A0H_UNTIL_AFH: u32 = 0xffff_fffe;
+const EFS_GENERATION_FAMILY_1AH_MODELS_00H_UNTIL_0FH: u32 = 0xffff_ffe3;
+//const EFS_GENERATION_FAMILY_1AH_MODELS_10H_UNTIL_1FH: u32 = 0xffff_ffe3;
+const EFS_GENERATION_UNKNOWN: u32 = 0xffff_ffff;
+
 impl Efh {
     /// As a safeguard, this finds out whether the EFH position V is likely a
     /// flash location from the beginning of the flash.
@@ -363,19 +371,25 @@ impl Efh {
             ProcessorGeneration::Naples => {
                 // Naples didn't have generation flags yet, so make sure none of them are cleared.
                 // Naples didn't have normal (non-MMIO) offsets yet--so those also should be unavailable.
-                self.efs_generations.get() == 0xffff_ffff
+                self.efs_generations.get() == EFS_GENERATION_UNKNOWN
             }
             ProcessorGeneration::Rome => {
                 // Rome didn't have generation flags yet, so make sure none of them are cleared.
                 // Bit 0 should be cleared (i.e. this is a second-gen EFS).
-                self.efs_generations.get() == 0xffff_fffe
+                self.efs_generations.get()
+                    == EFS_GENERATION_FAMILY_17H_MODELS_30H_UNTIL_3FH
             }
-            ProcessorGeneration::Milan | ProcessorGeneration::Genoa => {
-                (self.efs_generations.get() & (1 << 0b0000)) == 0
+            ProcessorGeneration::Milan => {
+                self.efs_generations.get()
+                    == EFS_GENERATION_FAMILY_19H_MODELS_00H_UNTIL_0FH
+            }
+            ProcessorGeneration::Genoa => {
+                self.efs_generations.get()
+                    == EFS_GENERATION_FAMILY_19H_MODELS_10H_UNTIL_1FH
             }
             ProcessorGeneration::Turin => {
-                // XXX: Is Turin Model 00h-0Fh or 10h-1Fh? If the former, should be 0b0010 instead.
-                (self.efs_generations.get() & (1 << 0b0011)) == 0
+                self.efs_generations.get()
+                    == EFS_GENERATION_FAMILY_1AH_MODELS_00H_UNTIL_0FH
             }
         }
     }
@@ -385,12 +399,20 @@ impl Efh {
     ) -> u32 {
         match generation {
             // Naples didn't have normal (non-MMIO) offsets yet--so mark them unavailable.
-            ProcessorGeneration::Naples => 0xffff_ffff,
+            ProcessorGeneration::Naples => EFS_GENERATION_UNKNOWN,
             // Rome didn't have generation flags yet, so make sure to clear none of them.
-            ProcessorGeneration::Rome => 0xffff_fffe,
-            ProcessorGeneration::Milan => 0xffff_fffc,
-            ProcessorGeneration::Genoa => 0xffff_fffe,
-            ProcessorGeneration::Turin => 0xffff_ffe3, // 0b1...00011
+            ProcessorGeneration::Rome => {
+                EFS_GENERATION_FAMILY_17H_MODELS_30H_UNTIL_3FH
+            }
+            ProcessorGeneration::Milan => {
+                EFS_GENERATION_FAMILY_19H_MODELS_00H_UNTIL_0FH
+            }
+            ProcessorGeneration::Genoa => {
+                EFS_GENERATION_FAMILY_19H_MODELS_10H_UNTIL_1FH
+            }
+            ProcessorGeneration::Turin => {
+                EFS_GENERATION_FAMILY_1AH_MODELS_00H_UNTIL_0FH
+            }
         }
     }
 
