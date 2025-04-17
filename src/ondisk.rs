@@ -1,7 +1,6 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
 use crate::flash::Location;
-use crate::struct_accessors::DummyErrorChecks;
 use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
 use crate::struct_accessors::make_accessors;
@@ -576,8 +575,6 @@ impl Default for AddressMode {
 pub(crate) const WEAK_ADDRESS_MODE: AddressMode =
     AddressMode::DirectoryRelativeOffset;
 
-impl DummyErrorChecks for AddressMode {}
-
 pub enum ValueOrLocation {
     Value(u64),
     PhysicalAddress(u32),
@@ -754,7 +751,7 @@ impl ValueOrLocation {
     }
 }
 
-/// XXX: If I move this to struct_accessors, it doesn't work anymore.
+// XXX: If I move this to struct_accessors, it doesn't work anymore.
 
 /// A variant of the make_accessors macro for modular_bitfields.
 macro_rules! make_bitfield_serde {(
@@ -792,6 +789,7 @@ macro_rules! make_bitfield_serde {(
     }
 
     #[cfg(feature = "serde")]
+    #[allow(dead_code)]
     impl $StructName {
         $(
             paste::paste!{
@@ -811,14 +809,14 @@ macro_rules! make_bitfield_serde {(
                 )?
                 $(
                     #[allow(non_snake_case)]
-                    pub(crate) fn [<serde_with_ $field_name>]<'a>(self : &mut Self, value: $field_ty) -> &mut Self {
+                    pub(crate) fn [<serde_with_ $field_name>](self : &mut Self, value: $field_ty) -> &mut Self {
                         self.[<set_ $field_name>](value.into());
                         self
                     }
                 )?
                 $(
                     #[allow(non_snake_case)]
-                    pub(crate) fn [<serde_with_ $field_name>]<'a>(self : &mut Self, value: $serde_ty) -> &mut Self {
+                    pub(crate) fn [<serde_with_ $field_name>](self : &mut Self, value: $serde_ty) -> &mut Self {
                         self.[<set_ $field_name>](value.into());
                         self
                     }
@@ -863,7 +861,7 @@ impl Default for EspiIoMode {
 make_bitfield_serde! {
     #[bitfield(bits = 8)]
     #[repr(u8)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, Default)]
     pub struct EfhEspiConfiguration {
         #[skip(getters, setters)]
         invalid || #[serde(default)] bool : bool,
@@ -876,6 +874,7 @@ make_bitfield_serde! {
     }
 }
 
+#[cfg(feature = "serde")]
 impl EfhEspiConfiguration {
     fn set_invalid(&mut self, value: bool) {
         assert!(!value);
@@ -959,7 +958,7 @@ impl DirectoryAdditionalInfo {
         }
     }
     pub fn try_from_unit(value: u16) -> Option<usize> {
-        let result: usize = value.try_into().ok()?;
+        let result: usize = value.into();
         result.checked_mul(Self::UNIT)
     }
 }
@@ -1170,8 +1169,6 @@ pub enum PspDirectoryEntryType {
     S3Image = 0xA0,
 }
 
-impl DummyErrorChecks for PspDirectoryEntryType {}
-
 /// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -1182,8 +1179,6 @@ pub enum PspSoftFuseChain32MiBSpiDecoding {
     UpperHalf = 1,
 }
 
-impl DummyErrorChecks for PspSoftFuseChain32MiBSpiDecoding {}
-
 #[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -1192,8 +1187,6 @@ pub enum PspSoftFuseChainPostCodeDecoding {
     Lpc = 0,
     Espi = 1,
 }
-
-impl DummyErrorChecks for PspSoftFuseChainPostCodeDecoding {}
 
 make_bitfield_serde! {
     #[bitfield(bits = 64)]
@@ -1241,8 +1234,6 @@ pub enum PspDirectoryRomId {
     SpiCs2 = 1,
 }
 
-impl DummyErrorChecks for PspDirectoryRomId {}
-
 impl Default for PspDirectoryRomId {
     fn default() -> Self {
         Self::SpiCs1
@@ -1259,8 +1250,6 @@ pub enum BhdDirectoryRomId {
     SpiCs1 = 0,
     SpiCs2 = 1,
 }
-
-impl DummyErrorChecks for BhdDirectoryRomId {}
 
 impl Default for BhdDirectoryRomId {
     fn default() -> Self {
@@ -1282,6 +1271,12 @@ make_bitfield_serde! {
         pub instance || u8 : B4 | pub get u8 : pub set u8,
         #[allow(non_snake_case)]
         _reserved_0 || #[serde(default)] u16 : B9,
+    }
+}
+
+impl Default for PspDirectoryEntryAttrs {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1593,8 +1588,6 @@ pub enum BhdDirectoryEntryType {
     SecondLevelDirectory = 0x70, // also a BhdDirectory
 }
 
-impl DummyErrorChecks for BhdDirectoryEntryType {}
-
 #[derive(Copy, Clone, Debug, FromPrimitive, BitfieldSpecifier)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -1612,11 +1605,9 @@ impl Default for BhdDirectoryEntryRegionType {
     }
 }
 
-impl DummyErrorChecks for BhdDirectoryEntryRegionType {}
-
 make_bitfield_serde! {
     #[bitfield(bits = 32)]
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Default)]
     #[repr(u32)]
     pub struct BhdDirectoryEntryAttrs {
         #[bits = 8]

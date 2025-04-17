@@ -583,11 +583,13 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
     /// Returns an iterator over level 1 BHD directories.
     /// If PROCESSOR_GENERATION is Some, then only return the directories
     /// matching that generation.
-
-    // The thing at each Location can be one of those things:
-    // * A ComboDirectory with entries' payload of type BhdDirectory
-    // * A BhdDirectory
-    // Therefore, just return locations.
+    ///
+    /// The thing at each Location can be one of those things:
+    ///
+    /// * A ComboDirectory with entries' payload of type BhdDirectory
+    /// * A BhdDirectory
+    ///
+    /// Therefore, just return locations.
     pub fn bhd_directories(
         &self,
         processor_generation: Option<ProcessorGeneration>,
@@ -792,10 +794,10 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
                 ProcessorGeneration::Turin,
             )
         {
-            self.efh.set_bhd_directory_table_milan(beginning.into());
+            self.efh.set_bhd_directory_table_milan(beginning);
         // FIXME: ensure that the others are unset?
         } else {
-            self.efh.bhd_directory_tables[2].set(beginning.into());
+            self.efh.bhd_directory_tables[2].set(beginning);
             // FIXME: ensure that the others are unset?
         }
         self.write_efh()?;
@@ -842,7 +844,7 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
     ) -> Result<()> {
         let beginning = directory.beginning;
         // TODO: Boards older than Rome have 0xff at the top bits.  Depends on address_mode maybe.
-        self.efh.set_psp_directory_table_location_zen(beginning.into());
+        self.efh.set_psp_directory_table_location_zen(beginning);
         self.write_efh()?;
         Ok(())
     }
