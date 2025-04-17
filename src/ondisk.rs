@@ -1,13 +1,12 @@
 // This file contains the AMD firmware Flash on-disk format.  Please only change it in coordination with the AMD firmware team.  Even then, you probably shouldn't.
 
 use crate::flash::Location;
-use crate::struct_accessors::make_accessors;
 use crate::struct_accessors::DummyErrorChecks;
 use crate::struct_accessors::Getter;
 use crate::struct_accessors::Setter;
+use crate::struct_accessors::make_accessors;
 use crate::types::Error;
 use crate::types::Result;
-use byteorder::LittleEndian;
 use core::convert::TryFrom;
 use core::convert::TryInto;
 use modular_bitfield::prelude::*;
@@ -16,24 +15,31 @@ use num_derive::ToPrimitive;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use strum_macros::EnumString;
-use zerocopy::{AsBytes, FromBytes, LayoutVerified, Unaligned, U32, U64};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, Ref, U32, U64,
+    Unaligned,
+};
 
 //use crate::configs;
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
-pub fn header_from_collection_mut<T: Sized + FromBytes + AsBytes>(
+pub fn header_from_collection_mut<
+    T: Sized + FromBytes + IntoBytes + Immutable + KnownLayout,
+>(
     buf: &mut [u8],
 ) -> Option<&mut T> {
-    LayoutVerified::<_, T>::new_from_prefix(buf)
-        .map(|(item, _xbuf)| item.into_mut())
+    Ref::<_, T>::from_prefix(buf).map(|(item, _xbuf)| Ref::into_mut(item)).ok()
 }
 
 /// Given *BUF (a collection of multiple items), retrieves the first of the items and returns it.
 /// If the item cannot be parsed, returns None.
-pub fn header_from_collection<T: Sized + FromBytes>(buf: &[u8]) -> Option<&T> {
-    LayoutVerified::<_, T>::new_from_prefix(buf)
-        .map(|(item, _xbuf)| item.into_ref())
+pub fn header_from_collection<
+    T: Sized + FromBytes + Immutable + KnownLayout,
+>(
+    buf: &[u8],
+) -> Option<&T> {
+    Ref::<_, T>::from_prefix(buf).map(|(item, _xbuf)| Ref::into_ref(item)).ok()
 }
 
 type LU32 = U32<LittleEndian>;
@@ -186,7 +192,7 @@ pub enum SpiRomeMicronMode {
 }
 
 make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+    #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy, Debug)]
     #[repr(C, packed)]
     pub(crate) struct Efh {
         signature || u32 : LU32 | pub get u32 : pub set u32,                           // 0x55aa_55aa
@@ -297,7 +303,7 @@ pub struct EfhRomeSpiMode {
 const EFS_GENERATION_FAMILY_17H_MODELS_30H_UNTIL_3FH: u32 = 0xffff_fffe; // Rome; again--like in Genoa
 const EFS_GENERATION_FAMILY_19H_MODELS_00H_UNTIL_0FH: u32 = 0xffff_fffc;
 const EFS_GENERATION_FAMILY_19H_MODELS_10H_UNTIL_1FH: u32 = 0xffff_fffe; // Genoa
-                                                                         //const EFS_GENERATION_FAMILY_19H_MODELS_A0H_UNTIL_AFH: u32 = 0xffff_fffe;
+//const EFS_GENERATION_FAMILY_19H_MODELS_A0H_UNTIL_AFH: u32 = 0xffff_fffe;
 const EFS_GENERATION_FAMILY_1AH_MODELS_00H_UNTIL_0FH: u32 = 0xffff_ffe3;
 //const EFS_GENERATION_FAMILY_1AH_MODELS_10H_UNTIL_1FH: u32 = 0xffff_ffe3;
 const EFS_GENERATION_UNKNOWN: u32 = 0xffff_ffff;
@@ -970,7 +976,9 @@ pub trait DirectoryHeader {
     fn set_checksum(&mut self, value: u32);
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[derive(
+    FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy,
+)]
 #[repr(C, packed)]
 pub struct PspDirectoryHeader {
     pub(crate) cookie: [u8; 4], // b"$PSP" or b"$PL2"
@@ -1278,7 +1286,7 @@ make_bitfield_serde! {
 }
 
 make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+    #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy)]
     #[repr(C, packed)]
     pub struct PspDirectoryEntry {
         pub(crate) attrs || u32 : LU32,
@@ -1321,8 +1329,9 @@ pub trait DirectoryEntrySerde: Sized {
 }
 impl DirectoryEntrySerde for PspDirectoryEntry {
     fn from_slice(source: &[u8]) -> Option<Self> {
-        let result = LayoutVerified::<_, Self>::new_unaligned(source)?;
-        Some(*result.into_ref())
+        Ref::<_, Self>::from_bytes(source)
+            .map(|result| *Ref::into_ref(result))
+            .ok()
     }
     fn copy_into_slice(&self, destination: &mut [u8]) {
         destination.copy_from_slice(self.as_bytes())
@@ -1451,11 +1460,7 @@ impl DirectoryEntry for PspDirectoryEntry {
     }
     fn size(&self) -> Option<u32> {
         let size = self.internal_size.get();
-        if size == Self::SIZE_VALUE_MARKER {
-            None
-        } else {
-            Some(size)
-        }
+        if size == Self::SIZE_VALUE_MARKER { None } else { Some(size) }
     }
     fn set_size(&mut self, value: Option<u32>) {
         self.internal_size.set(match value {
@@ -1484,7 +1489,9 @@ impl core::fmt::Debug for PspDirectoryEntry {
     }
 }
 
-#[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+#[derive(
+    FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy,
+)]
 #[repr(C, packed)]
 pub struct BhdDirectoryHeader {
     pub(crate) cookie: [u8; 4], // b"$BHD" or b"$BL2"
@@ -1635,7 +1642,7 @@ make_bitfield_serde! {
     }
 }
 make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy)]
+    #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy)]
     #[repr(C, packed)]
     pub struct BhdDirectoryEntry {
         attrs || u32 : LU32,
@@ -1647,8 +1654,9 @@ make_accessors! {
 
 impl DirectoryEntrySerde for BhdDirectoryEntry {
     fn from_slice(source: &[u8]) -> Option<Self> {
-        let result = LayoutVerified::<_, Self>::new_unaligned(source)?;
-        Some(*result.into_ref())
+        Ref::<_, Self>::from_bytes(source)
+            .map(|result| *Ref::into_ref(result))
+            .ok()
     }
     fn copy_into_slice(&self, destination: &mut [u8]) {
         destination.copy_from_slice(self.as_bytes())
@@ -1784,11 +1792,7 @@ impl DirectoryEntry for BhdDirectoryEntry {
     }
     fn size(&self) -> Option<u32> {
         let size = self.internal_size.get();
-        if size == Self::SIZE_VALUE_MARKER {
-            None
-        } else {
-            Some(size)
-        }
+        if size == Self::SIZE_VALUE_MARKER { None } else { Some(size) }
     }
     fn set_size(&mut self, value: Option<u32>) {
         self.internal_size.set(match value {
@@ -1834,7 +1838,7 @@ pub enum ComboDirectoryLookupMode {
 }
 
 make_accessors! {
-    #[derive(FromBytes, AsBytes, Unaligned, Clone, Copy, Debug)]
+    #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy, Debug)]
     #[repr(C, packed)]
     pub struct ComboDirectoryHeader {
         pub(crate) cookie: [u8; 4], // b"2PSP" or b"2BHD"
@@ -1906,7 +1910,9 @@ pub enum ComboDirectoryEntryFilter {
     ChipFamilyId(u32), // = 1,
 }
 
-#[derive(Clone, Copy, FromBytes, AsBytes, Unaligned)]
+#[derive(
+    Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned,
+)]
 #[repr(C, packed)]
 pub struct ComboDirectoryEntry {
     pub(crate) internal_key: LU32, // 0-PSP ID; 1-chip family ID
@@ -1916,8 +1922,9 @@ pub struct ComboDirectoryEntry {
 
 impl DirectoryEntrySerde for ComboDirectoryEntry {
     fn from_slice(source: &[u8]) -> Option<Self> {
-        let result = LayoutVerified::<_, Self>::new_unaligned(source)?;
-        Some(*result.into_ref())
+        Ref::<_, Self>::from_bytes(source)
+            .map(|result| *Ref::into_ref(result))
+            .ok()
     }
     fn copy_into_slice(&self, destination: &mut [u8]) {
         destination.copy_from_slice(self.as_bytes())

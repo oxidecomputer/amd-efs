@@ -2,9 +2,10 @@
 
 use crate::types::Error;
 use crate::types::Result;
-use byteorder::LittleEndian;
 use num_traits::{FromPrimitive, ToPrimitive};
-use zerocopy::{AsBytes, FromBytes, U16, U32, U64};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, U16, U32, U64,
+};
 
 //pub(crate) trait SerdeRemote {
 //    type Config;
@@ -65,7 +66,9 @@ impl<T: FromPrimitive> Getter<Result<T>> for u32 {
         T::from_u32(self).ok_or(Error::EntryTypeMismatch)
     }
 }
-#[derive(Debug, PartialEq, FromBytes, AsBytes, Clone, Copy)]
+#[derive(
+    Debug, PartialEq, FromBytes, IntoBytes, Immutable, KnownLayout, Clone, Copy,
+)]
 #[repr(C, packed)]
 pub(crate) struct BU8(pub(crate) u8);
 impl Getter<Result<bool>> for BU8 {
@@ -87,7 +90,9 @@ impl From<bool> for BU8 {
     }
 }
 
-#[derive(Debug, PartialEq, FromBytes, AsBytes, Clone, Copy)]
+#[derive(
+    Debug, PartialEq, FromBytes, IntoBytes, Immutable, KnownLayout, Clone, Copy,
+)]
 #[repr(C, packed)]
 pub(crate) struct BLU16(pub(crate) U16<LittleEndian>);
 impl Getter<Result<bool>> for BLU16 {

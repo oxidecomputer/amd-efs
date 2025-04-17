@@ -6,7 +6,6 @@ edition = "2024"
 license = "MPL-2.0"
 
 [dependencies]
-byteorder = { version = "1.4.3", default-features = false }
 fletcher = "1.0"
 modular-bitfield = { version = "0.11.2", default-features = false }
 num-derive = { version = "0.4.2" }
@@ -16,7 +15,7 @@ schemars = { version = "0.8.8", optional = true }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 strum = { version = "0.27", default-features = false, features = [] }
 strum_macros = { version = "0.27" }
-zerocopy = "0.6"
+zerocopy = { version = "0.8", features = ["derive"] }
 thiserror = { version = "2.0", optional = true }
 memoffset = "0.9"
 
