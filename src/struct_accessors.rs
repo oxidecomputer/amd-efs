@@ -146,29 +146,6 @@ impl Setter<bool> for BLU16 {
     }
 }
 
-/// Since primitive types are not a Result, this just wraps them into a Result.
-/// The reason this exists is because our macros don't know whether or not
-/// the getters return Result--but they have to be able to call map_err
-/// on it in case these DO return Result.
-pub(crate) trait DummyErrorChecks: Sized {
-    fn map_err<F, O>(self, _op: O) -> core::result::Result<Self, F>
-    where
-        O: Fn(Self) -> F,
-    {
-        Ok(self)
-    }
-}
-
-impl DummyErrorChecks for u64 {}
-
-impl DummyErrorChecks for u32 {}
-
-impl DummyErrorChecks for u16 {}
-
-impl DummyErrorChecks for u8 {}
-
-impl DummyErrorChecks for bool {}
-
 /// This macro expects a struct as a parameter (attributes are fine) and then,
 /// first, defines the exact same struct, and also a more user-friendly struct
 /// (name starts with "Serde") that can be used for serde (note: if you want
@@ -268,7 +245,7 @@ macro_rules! make_accessors {(
                       #[allow(dead_code)]
                       #[allow(non_snake_case)]
                       $setter_vis
-                      fn [<with_ $field_name>]<'a>(self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
+                      fn [<with_ $field_name>](self: &mut Self, value: $field_setter_user_ty) -> &mut Self {
                           let result = self;
                           result.$field_name.set1(value);
                           result
@@ -289,7 +266,7 @@ macro_rules! make_accessors {(
                 #[inline]
                 #[allow(dead_code)]
                 #[allow(non_snake_case)]
-                pub(crate) fn [<serde_with_ $field_name>]<'a>(self: &mut Self, value: $serde_ty) -> &mut Self {
+                pub(crate) fn [<serde_with_ $field_name>](self: &mut Self, value: $serde_ty) -> &mut Self {
                     let result = self;
                     result.$field_name.set1(value);
                     result
@@ -308,7 +285,7 @@ macro_rules! make_accessors {(
                 #[inline]
                 #[allow(dead_code)]
                 #[allow(non_snake_case)]
-                pub(crate) fn [<serde_with_ $field_name>]<'a>(self: &mut Self, value: $field_ty) -> &mut Self {
+                pub(crate) fn [<serde_with_ $field_name>](self: &mut Self, value: $field_ty) -> &mut Self {
                     let result = self;
                     result.$field_name = value.into();
                     result
