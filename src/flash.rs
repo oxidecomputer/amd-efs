@@ -38,7 +38,9 @@ pub enum Error {
     Io(IoError),
     #[cfg_attr(
         feature = "std",
-        error("block not aligned for erase (block size = 0x{erasable_block_size:x} B, intra block offset = 0x{intra_block_offset:x} B)")
+        error(
+            "block not aligned for erase (block size = 0x{erasable_block_size:x} B, intra block offset = 0x{intra_block_offset:x} B)"
+        )
     )]
     Alignment { erasable_block_size: usize, intra_block_offset: usize },
     #[cfg_attr(feature = "std", error("requested size is unavailable"))]

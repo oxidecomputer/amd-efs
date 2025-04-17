@@ -1,19 +1,18 @@
 use crate::amdfletcher32::AmdFletcher32;
 use crate::flash;
-use crate::ondisk::header_from_collection;
-use crate::ondisk::header_from_collection_mut;
 #[cfg(feature = "std")]
 use crate::ondisk::DirectoryAdditionalInfo;
 use crate::ondisk::DirectoryEntrySerde;
-pub use crate::ondisk::ProcessorGeneration;
 use crate::ondisk::EFH_POSITION;
+pub use crate::ondisk::ProcessorGeneration;
+use crate::ondisk::header_from_collection;
+use crate::ondisk::header_from_collection_mut;
 use crate::ondisk::{
-    mmio_decode, AddressMode, BhdDirectoryEntry, BhdDirectoryEntryType,
-    BhdDirectoryHeader, ComboDirectoryEntry, ComboDirectoryHeader,
-    DirectoryEntry, DirectoryHeader, Efh, EfhBulldozerSpiMode,
-    EfhEspiConfiguration, EfhNaplesSpiMode, EfhRomeSpiMode, PspDirectoryEntry,
-    PspDirectoryEntryType, PspDirectoryHeader, ValueOrLocation,
-    WEAK_ADDRESS_MODE,
+    AddressMode, BhdDirectoryEntry, BhdDirectoryEntryType, BhdDirectoryHeader,
+    ComboDirectoryEntry, ComboDirectoryHeader, DirectoryEntry, DirectoryHeader,
+    Efh, EfhBulldozerSpiMode, EfhEspiConfiguration, EfhNaplesSpiMode,
+    EfhRomeSpiMode, PspDirectoryEntry, PspDirectoryEntryType,
+    PspDirectoryHeader, ValueOrLocation, WEAK_ADDRESS_MODE, mmio_decode,
 };
 use crate::types::Error;
 use crate::types::Result;
@@ -23,8 +22,7 @@ use core::mem::size_of;
 #[cfg(feature = "std")]
 use flash::ErasableRange;
 use flash::{ErasableLocation, FlashRead, FlashWrite, Location};
-use zerocopy::AsBytes;
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 // XXX: This is arbitrary.
 const MAX_DIRECTORY_ENTRIES: usize = 64;
@@ -32,7 +30,7 @@ const MAX_DIRECTORY_ENTRIES: usize = 64;
 // TODO: split into Directory and DirectoryContents (disjunct) if requested in additional_info.
 pub struct Directory<
     MainHeader,
-    Item: DirectoryEntry + FromBytes + AsBytes + Default,
+    Item: DirectoryEntry + FromBytes + IntoBytes + Immutable + KnownLayout + Default,
     const MAIN_HEADER_SIZE: usize,
     const ITEM_SIZE: usize,
 > {
@@ -52,17 +50,25 @@ pub struct Directory<
 }
 
 impl<
-        MainHeader: Copy + DirectoryHeader + FromBytes + AsBytes + Default,
-        Item: Copy
-            + DirectoryEntrySerde
-            + DirectoryEntry
-            + core::fmt::Debug
-            + FromBytes
-            + AsBytes
-            + Default,
-        const MAIN_HEADER_SIZE: usize,
-        const ITEM_SIZE: usize,
-    > Directory<MainHeader, Item, MAIN_HEADER_SIZE, ITEM_SIZE>
+    MainHeader: Copy
+        + DirectoryHeader
+        + FromBytes
+        + IntoBytes
+        + Immutable
+        + KnownLayout
+        + Default,
+    Item: Copy
+        + DirectoryEntrySerde
+        + DirectoryEntry
+        + core::fmt::Debug
+        + FromBytes
+        + IntoBytes
+        + Immutable
+        + KnownLayout
+        + Default,
+    const MAIN_HEADER_SIZE: usize,
+    const ITEM_SIZE: usize,
+> Directory<MainHeader, Item, MAIN_HEADER_SIZE, ITEM_SIZE>
 {
     pub fn header(&self) -> MainHeader {
         self.header
@@ -977,13 +983,13 @@ impl<'a, T: FlashRead + FlashWrite> Efs<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::{EfhBulldozerSpiMode, EfhNaplesSpiMode, EfhRomeSpiMode};
+    use crate::Efh;
+    use crate::Efs;
+    use crate::Error;
     use crate::flash;
     use crate::ondisk::{
         SpiFastSpeedNew, SpiNaplesMicronMode, SpiReadMode, SpiRomeMicronMode,
     };
-    use crate::Efh;
-    use crate::Efs;
-    use crate::Error;
     use flash::{ErasableLocation, FlashAlign, FlashRead, FlashWrite};
 
     struct Storage {}
