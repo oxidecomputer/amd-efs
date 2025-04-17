@@ -1,3 +1,5 @@
+workspace = { members = ["xtask"] }
+
 [package]
 name = "amd-efs"
 version = "0.4.4"
