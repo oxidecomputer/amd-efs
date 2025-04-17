@@ -865,11 +865,17 @@ make_bitfield_serde! {
     pub struct EfhEspiConfiguration {
         #[skip(getters, setters)]
         invalid || #[serde(default)] bool : bool,
+        #[allow(dead_code)]
         pub enable_port_0x80 || bool : bool | pub get bool : pub set bool,
+        #[allow(dead_code)]
         pub alert_pin || u8 : B1 | pub get u8 : pub set u8,
+        #[allow(dead_code)]
         pub data_bus || u8 : B1 | pub get u8 : pub set u8,
+        #[allow(dead_code)]
         pub clock || u8 : B1 | pub get u8 : pub set u8,
+        #[allow(dead_code)]
         pub respond_port_0x80 || bool : bool | pub get bool : pub set bool,
+        #[allow(dead_code)]
         pub io_mode : EspiIoMode | pub get EspiIoMode : pub set EspiIoMode,
     }
 }
@@ -889,9 +895,11 @@ make_bitfield_serde! {
     #[repr(u32)]
     #[derive(Copy, Clone, Debug)]
     pub struct DirectoryAdditionalInfo {
+        #[allow(dead_code)]
         pub max_size || u16 : B10 | pub get u16 : pub set u16, // directory size in 4 kiB; Note: doc error in AMD docs // TODO: Shrink setter.
         #[skip(getters, setters)]
         pub spi_block_size || u16 : B4, // spi block size in 4 kiB; Note: 0 = 64 kiB
+        #[allow(dead_code)]
         pub base_address || u16 : B15 | pub get u16 : pub set u16, // base address in 4 kiB; if the actual payload (the file contents) of the directory are somewhere else, this can specify where. // TODO: Shrink setter.
         #[bits = 2]
         pub address_mode : AddressMode | pub get AddressMode : pub set AddressMode, // FIXME: This should not be able to be changed (from/to 2 at least) as you are iterating over a directory--since the iterator has to interpret what it is reading relative to this setting // TODO: Shrink setter.
@@ -1193,24 +1201,35 @@ make_bitfield_serde! {
     #[repr(u64)]
     #[derive(Copy, Clone, Debug)]
     pub struct PspSoftFuseChain {
+        #[allow(dead_code)]
         pub secure_debug_unlock || #[serde(default)] bool : bool | pub get bool : pub set bool,
         #[allow(non_snake_case)]
         _reserved_0 || #[serde(default)] bool : bool,
+        #[allow(dead_code)]
         pub early_secure_debug_unlock || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(dead_code)]
         pub unlock_token_in_nvram || #[serde(default)] bool : bool | pub get bool : pub set bool, // if the unlock token has been stored (by us) into NVRAM
+        #[allow(dead_code)]
         pub force_security_policy_loading_even_if_insecure || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(dead_code)]
         pub load_diagnostic_bootloader || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(dead_code)]
         pub disable_psp_debug_prints || #[serde(default)] bool : bool | pub get bool : pub set bool,
         #[allow(non_snake_case)]
         _reserved_1 || #[serde(default)] u8 : B7,
+        #[allow(dead_code)]
         pub spi_decoding || PspSoftFuseChain32MiBSpiDecoding : PspSoftFuseChain32MiBSpiDecoding | pub get PspSoftFuseChain32MiBSpiDecoding : pub set PspSoftFuseChain32MiBSpiDecoding,
+        #[allow(dead_code)]
         pub postcode_decoding || PspSoftFuseChainPostCodeDecoding : PspSoftFuseChainPostCodeDecoding | pub get PspSoftFuseChainPostCodeDecoding : pub set PspSoftFuseChainPostCodeDecoding,
         #[allow(non_snake_case)]
         _reserved_2 || #[serde(default)] u16 : B12,
         #[allow(non_snake_case)]
         _reserved_3 || #[serde(default)] bool : bool,
+        #[allow(dead_code)]
         pub skip_mp2_firmware_loading || #[serde(default)] bool : bool | pub get bool : pub set bool,
+        #[allow(dead_code)]
         pub postcode_output_control_1byte || #[serde(default)] bool : bool | pub get bool : pub set bool, // ???
+        #[allow(dead_code)]
         pub force_recovery_booting || #[serde(default)] bool : bool | pub get bool : pub set bool,
         #[allow(non_snake_case)]
         _reserved_4 || #[serde(default)] u32 : B32,
