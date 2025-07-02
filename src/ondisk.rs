@@ -1090,20 +1090,26 @@ pub enum PspDirectoryEntryType {
 }
 
 /// For 32 MiB SPI Flash, which half to map to MMIO 0xff00_0000.
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(
+    Debug, Default, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[bits = 1]
 pub enum PspSoftFuseChain32MiBSpiDecoding {
+    #[default]
     LowerHalf = 0,
     UpperHalf = 1,
 }
 
-#[derive(Debug, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier)]
+#[derive(
+    Debug, Default, PartialEq, FromPrimitive, Clone, Copy, BitfieldSpecifier,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[bits = 1]
 pub enum PspSoftFuseChainPostCodeDecoding {
+    #[default]
     Lpc = 0,
     Espi = 1,
 }
@@ -1111,7 +1117,7 @@ pub enum PspSoftFuseChainPostCodeDecoding {
 make_bitfield_serde! {
     #[bitfield(bits = 64)]
     #[repr(u64)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, Default)]
     pub struct PspSoftFuseChain {
         #[allow(dead_code)]
         pub secure_debug_unlock || #[serde(default)] bool : bool | pub get bool : pub set bool,
@@ -1130,9 +1136,9 @@ make_bitfield_serde! {
         #[allow(non_snake_case)]
         _reserved_1 || #[serde(default)] u8 : B7,
         #[allow(dead_code)]
-        pub spi_decoding || PspSoftFuseChain32MiBSpiDecoding : PspSoftFuseChain32MiBSpiDecoding | pub get PspSoftFuseChain32MiBSpiDecoding : pub set PspSoftFuseChain32MiBSpiDecoding,
+        pub spi_decoding || #[serde(default)] PspSoftFuseChain32MiBSpiDecoding : PspSoftFuseChain32MiBSpiDecoding | pub get PspSoftFuseChain32MiBSpiDecoding : pub set PspSoftFuseChain32MiBSpiDecoding,
         #[allow(dead_code)]
-        pub postcode_decoding || PspSoftFuseChainPostCodeDecoding : PspSoftFuseChainPostCodeDecoding | pub get PspSoftFuseChainPostCodeDecoding : pub set PspSoftFuseChainPostCodeDecoding,
+        pub postcode_decoding || #[serde(default)] PspSoftFuseChainPostCodeDecoding : PspSoftFuseChainPostCodeDecoding | pub get PspSoftFuseChainPostCodeDecoding : pub set PspSoftFuseChainPostCodeDecoding,
         #[allow(non_snake_case)]
         _reserved_2 || #[serde(default)] u16 : B12,
         #[allow(non_snake_case)]
@@ -1145,12 +1151,6 @@ make_bitfield_serde! {
         pub force_recovery_booting || #[serde(default)] bool : bool | pub get bool : pub set bool,
         #[allow(non_snake_case)]
         _reserved_4 || #[serde(default)] u32 : B32,
-    }
-}
-
-impl Default for PspSoftFuseChain {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
